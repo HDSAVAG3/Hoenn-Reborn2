@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ============================================================
-      # 2. SET UP DEVKITPRO
+      # 2. DEVKITPRO
       # ============================================================
       - name: Initialize devkitPro environment
         shell: bash
@@ -43,7 +43,7 @@ jobs:
           cmake --version
 
       # ============================================================
-      # 3. INSTALL DEPENDENCIES
+      # 3. DEPENDENCIES
       # ============================================================
       - name: Install build dependencies
         shell: bash
@@ -119,10 +119,12 @@ jobs:
           test -f project/source/game_data.c
           test -f project/source/gba_core_mgba.c
 
+          echo "========================================"
           echo "PROJECT READY"
+          echo "========================================"
 
       # ============================================================
-      # 5. INSTALL BANNERTOOL
+      # 5. BANNERTOOL
       # ============================================================
       - name: Install bannertool
         shell: bash
@@ -147,13 +149,13 @@ jobs:
             bannertool.zip \
             -d bannertool_extract
 
-          echo "Bannertool release contents:"
+          echo "Bannertool files:"
           find bannertool_extract \
             -type f \
             | sort
 
           # IMPORTANT:
-          # Use the 64-bit Linux binary.
+          # Explicitly select the 64-bit Linux executable.
           BANNERTOOL_BIN=$(find bannertool_extract \
             -type f \
             -path "*/linux-x86_64/bannertool" \
@@ -162,7 +164,6 @@ jobs:
           if [ -z "$BANNERTOOL_BIN" ]; then
             echo "64-bit bannertool was not found."
 
-            echo "Available bannertool binaries:"
             find bannertool_extract \
               -type f \
               -name bannertool \
@@ -171,7 +172,7 @@ jobs:
             exit 1
           fi
 
-          echo "Using 64-bit bannertool:"
+          echo "Using:"
           echo "$BANNERTOOL_BIN"
 
           cp "$BANNERTOOL_BIN" \
@@ -185,19 +186,21 @@ jobs:
           export PATH="/opt/hoenn-tools:$PATH"
 
           echo "========================================"
-          echo "TESTING BANNERTOOL"
+          echo "VERIFYING BANNERTOOL"
           echo "========================================"
 
           command -v bannertool
+          test -x /opt/hoenn-tools/bannertool
 
-          bannertool --help
+          echo "Bannertool executable:"
+          ls -lh /opt/hoenn-tools/bannertool
 
           echo "========================================"
           echo "BANNERTOOL OK"
           echo "========================================"
 
       # ============================================================
-      # 6. INSTALL 3DS PACKAGING TOOLS
+      # 6. 3DS PACKAGING TOOLS
       # ============================================================
       - name: Install 3DS packaging tools
         shell: bash
@@ -232,6 +235,7 @@ jobs:
 
           if [ -z "$MAKEROM_BIN" ]; then
             echo "makerom executable not found."
+            find makerom_extract -type f | sort
             exit 1
           fi
 
@@ -240,6 +244,8 @@ jobs:
 
           chmod +x \
             /opt/hoenn-tools/makerom
+
+          echo "makerom installed."
 
           # --------------------------------------------------------
           # 3DSTOOLS
@@ -258,6 +264,11 @@ jobs:
             --zstd \
             -xf 3dstools.pkg.tar.zst \
             -C 3dstools_extract
+
+          echo "3dstools files:"
+          find 3dstools_extract \
+            -type f \
+            | sort
 
           THREE_DS_XTOOL=$(find 3dstools_extract \
             -type f \
@@ -288,6 +299,8 @@ jobs:
           chmod +x \
             /opt/hoenn-tools/3dsxtool \
             /opt/hoenn-tools/smdhtool
+
+          echo "3dstools installed."
 
           # --------------------------------------------------------
           # TEX3DS
@@ -335,6 +348,12 @@ jobs:
           command -v smdhtool
           command -v tex3ds
 
+          test -x /opt/hoenn-tools/bannertool
+          test -x /opt/hoenn-tools/makerom
+          test -x /opt/hoenn-tools/3dsxtool
+          test -x /opt/hoenn-tools/smdhtool
+          test -x /opt/hoenn-tools/tex3ds
+
           echo "========================================"
           echo "3DS TOOLS READY"
           echo "========================================"
@@ -350,7 +369,7 @@ jobs:
           rm -rf mgba
 
           echo "========================================"
-          echo "CLONING mGBA 0.10.5"
+          echo "GETTING mGBA 0.10.5"
           echo "========================================"
 
           git clone \
@@ -364,7 +383,7 @@ jobs:
           echo "mGBA SOURCE OK"
 
       # ============================================================
-      # 8. BUILD mGBA STATIC LIBRARY
+      # 8. BUILD mGBA
       # ============================================================
       - name: Build mGBA static library
         shell: bash
@@ -411,7 +430,7 @@ jobs:
             exit 1
           fi
 
-          echo "Found mGBA:"
+          echo "Found:"
           echo "$MGBA_LIB"
 
           mkdir -p project/mgba/build-hoenn-3ds
@@ -477,7 +496,9 @@ jobs:
           p.write_text(s)
           PY
 
+          echo "========================================"
           echo "MAKEFILE READY"
+          echo "========================================"
 
           test -f \
             mgba/build-hoenn-3ds/libmgba-static.a
@@ -577,7 +598,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # 16. UPLOAD BUILD LOGS
+      # 16. BUILD LOGS
       # ============================================================
       - name: Upload build logs
         if: always()
