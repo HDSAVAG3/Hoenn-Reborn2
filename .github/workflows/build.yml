@@ -30,13 +30,13 @@ jobs:
         run: |
           set -eux
 
-          echo "DEVKITPRO=$DEVKITPRO"
-          echo "DEVKITARM=$DEVKITARM"
-
           echo "$DEVKITARM/bin" >> "$GITHUB_PATH"
           echo "$DEVKITPRO/tools/bin" >> "$GITHUB_PATH"
 
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
+
+          echo "DEVKITPRO=$DEVKITPRO"
+          echo "DEVKITARM=$DEVKITARM"
 
           arm-none-eabi-gcc --version
           make --version
@@ -96,10 +96,10 @@ jobs:
 
           unzip -q "$ZIP_FILE" -d /tmp/hoenn_extract
 
-          echo "Extracted files:"
-          find /tmp/hoenn_extract -maxdepth 5 -type f | sort | head -300
-
-          MAKEFILE_PATH=$(find /tmp/hoenn_extract -type f -name Makefile | head -1)
+          MAKEFILE_PATH=$(find /tmp/hoenn_extract \
+            -type f \
+            -name Makefile \
+            | head -1)
 
           if [ -z "$MAKEFILE_PATH" ]; then
             echo "Could not find Makefile."
@@ -126,99 +126,46 @@ jobs:
           test -f project/source/gba_core_mgba.c
 
       # ============================================================
-      # 5. GET BANNERTOOL SOURCE
+      # 5. DOWNLOAD BANNERTOOL RELEASE
       # ============================================================
-      - name: Get bannertool source
+      - name: Install bannertool
         shell: bash
         run: |
           set -eux
 
-          rm -rf /tmp/bannertool
+          mkdir -p /opt/hoenn-tools
+
+          cd /tmp
 
           echo "========================================"
-          echo "CLONING BANNERTOOL"
+          echo "DOWNLOADING BANNERTOOL"
           echo "========================================"
 
-          git clone \
-            --depth 1 \
-            --branch v1.2.2 \
-            https://github.com/Epicpkmn11/bannertool.git \
-            /tmp/bannertool
+          wget -O bannertool.zip \
+            https://github.com/Epicpkmn11/bannertool/releases/download/v1.2.2/bannertool.zip
 
-          cd /tmp/bannertool
+          rm -rf bannertool_extract
+          mkdir bannertool_extract
 
-          echo "Original .gitmodules:"
-          cat .gitmodules
+          unzip -q \
+            bannertool.zip \
+            -d bannertool_extract
 
-          echo "========================================"
-          echo "FIXING SUBMODULE URL"
-          echo "========================================"
+          echo "Bannertool release contents:"
+          find bannertool_extract \
+            -type f \
+            | sort
 
-          if [ -f .gitmodules ]; then
-            sed -i \
-              's#git://github.com/#https://github.com/#g' \
-              .gitmodules
-
-            sed -i \
-              's#git@github.com:#https://github.com/#g' \
-              .gitmodules
-          fi
-
-          echo "Updated .gitmodules:"
-          cat .gitmodules
-
-          echo "========================================"
-          echo "SYNCING SUBMODULES"
-          echo "========================================"
-
-          git submodule sync --recursive
-
-          git submodule update \
-            --init \
-            --recursive \
-            --depth 1
-
-          echo "========================================"
-          echo "CHECKING BUILDTOOLS"
-          echo "========================================"
-
-          test -f buildtools/make_base
-
-          echo "buildtools/make_base FOUND"
-
-      # ============================================================
-      # 6. BUILD BANNERTOOL
-      # ============================================================
-      - name: Build bannertool
-        shell: bash
-        run: |
-          set -eux
-
-          cd /tmp/bannertool
-
-          echo "========================================"
-          echo "BUILDING BANNERTOOL"
-          echo "========================================"
-
-          make -j2
-
-          echo "========================================"
-          echo "SEARCHING FOR BANNERTOOL"
-          echo "========================================"
-
-          BANNERTOOL_BIN=$(find . \
+          BANNERTOOL_BIN=$(find bannertool_extract \
             -type f \
             -name bannertool \
-            -perm -111 \
             | head -1)
 
           if [ -z "$BANNERTOOL_BIN" ]; then
-            echo "bannertool executable was not produced."
+            echo "Could not find bannertool executable."
 
-            echo "Executable files:"
-            find . \
+            find bannertool_extract \
               -type f \
-              -perm -111 \
               | sort
 
             exit 1
@@ -227,24 +174,27 @@ jobs:
           echo "Found bannertool:"
           echo "$BANNERTOOL_BIN"
 
-          mkdir -p /opt/hoenn-tools
-
           cp "$BANNERTOOL_BIN" \
             /opt/hoenn-tools/bannertool
 
           chmod +x \
             /opt/hoenn-tools/bannertool
 
+          echo "/opt/hoenn-tools" >> "$GITHUB_PATH"
+
+          export PATH="/opt/hoenn-tools:$PATH"
+
           echo "========================================"
           echo "TESTING BANNERTOOL"
           echo "========================================"
 
-          /opt/hoenn-tools/bannertool --help
+          command -v bannertool
+          bannertool --help
 
-          echo "/opt/hoenn-tools" >> "$GITHUB_PATH"
+          echo "BANNERTOOL OK"
 
       # ============================================================
-      # 7. INSTALL 3DS PACKAGING TOOLS
+      # 6. INSTALL 3DS PACKAGING TOOLS
       # ============================================================
       - name: Install 3DS packaging tools
         shell: bash
@@ -253,10 +203,14 @@ jobs:
 
           mkdir -p /opt/hoenn-tools
 
-          # --------------------------------------------------------
-          # makerom
-          # --------------------------------------------------------
           cd /tmp
+
+          # --------------------------------------------------------
+          # MAKEROM
+          # --------------------------------------------------------
+          echo "========================================"
+          echo "INSTALLING MAKEROM"
+          echo "========================================"
 
           wget -O makerom.zip \
             https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip
@@ -286,8 +240,12 @@ jobs:
             /opt/hoenn-tools/makerom
 
           # --------------------------------------------------------
-          # 3dstools
+          # 3DSTOOLS
           # --------------------------------------------------------
+          echo "========================================"
+          echo "INSTALLING 3DSTOOLS"
+          echo "========================================"
+
           wget -O 3dstools.pkg.tar.zst \
             https://wii.leseratte10.de/devkitPro/other-stuff/3dstools/3dstools-1.3.1-3-linux_x86_64.pkg.tar.zst
 
@@ -300,7 +258,9 @@ jobs:
             -C 3dstools_extract
 
           echo "3dstools contents:"
-          find 3dstools_extract -type f | sort
+          find 3dstools_extract \
+            -type f \
+            | sort
 
           THREE_DS_XTOOL=$(find 3dstools_extract \
             -type f \
@@ -333,8 +293,12 @@ jobs:
             /opt/hoenn-tools/smdhtool
 
           # --------------------------------------------------------
-          # tex3ds
+          # TEX3DS
           # --------------------------------------------------------
+          echo "========================================"
+          echo "INSTALLING TEX3DS"
+          echo "========================================"
+
           wget -O tex3ds.pkg.tar.zst \
             https://wii.leseratte10.de/devkitPro/other-stuff/tex3ds/tex3ds-2.3.0-4-linux_x86_64.pkg.tar.zst
 
@@ -362,13 +326,10 @@ jobs:
           chmod +x \
             /opt/hoenn-tools/tex3ds
 
-          # --------------------------------------------------------
-          # Verify
-          # --------------------------------------------------------
           export PATH="/opt/hoenn-tools:$PATH"
 
           echo "========================================"
-          echo "VERIFYING 3DS TOOLS"
+          echo "VERIFYING ALL 3DS TOOLS"
           echo "========================================"
 
           command -v bannertool
@@ -377,18 +338,12 @@ jobs:
           command -v smdhtool
           command -v tex3ds
 
-          bannertool --help
-          makerom --help
-          3dsxtool --help
-          smdhtool --help
-          tex3ds --help
-
           echo "========================================"
-          echo "ALL 3DS TOOLS OK"
+          echo "3DS TOOLS READY"
           echo "========================================"
 
       # ============================================================
-      # 8. GET mGBA
+      # 7. GET mGBA
       # ============================================================
       - name: Get mGBA source
         shell: bash
@@ -407,22 +362,12 @@ jobs:
             https://github.com/mgba-emu/mgba.git \
             mgba
 
-          echo "mGBA root:"
-          ls -la mgba
-
           test -f mgba/CMakeLists.txt
 
-          echo "mGBA CMakeLists.txt FOUND"
-
-          echo "3DS platform files:"
-
-          find mgba/src/platform/3ds \
-            -maxdepth 2 \
-            -type f \
-            | sort
+          echo "mGBA SOURCE OK"
 
       # ============================================================
-      # 9. BUILD mGBA
+      # 8. BUILD mGBA
       # ============================================================
       - name: Build mGBA static library
         shell: bash
@@ -460,13 +405,8 @@ jobs:
             -j2
 
           echo "========================================"
-          echo "SEARCHING FOR libmgba.a"
+          echo "FINDING libmgba.a"
           echo "========================================"
-
-          find mgba/build-hoenn-3ds \
-            -type f \
-            -name "libmgba.a" \
-            -print
 
           MGBA_LIB=$(find mgba/build-hoenn-3ds \
             -type f \
@@ -496,15 +436,13 @@ jobs:
             mgba/src/. \
             project/mgba/src/
 
-          echo "========================================"
-          echo "mGBA STAGED"
-          echo "========================================"
+          echo "mGBA STATIC LIBRARY READY"
 
           ls -lh \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
       # ============================================================
-      # 10. PREPARE MAKEFILE
+      # 9. PREPARE MAKEFILE
       # ============================================================
       - name: Prepare Hoenn Reborn Makefile
         shell: bash
@@ -512,9 +450,6 @@ jobs:
           set -eux
 
           cd project
-
-          echo "Original Makefile:"
-          sed -n '1,100p' Makefile
 
           python3 - <<'PY'
           from pathlib import Path
@@ -525,6 +460,7 @@ jobs:
           start = s.find("mgba-core:")
 
           if start != -1:
+
               end = s.find("\n3dsx:", start)
 
               if end == -1:
@@ -547,16 +483,14 @@ jobs:
           PY
 
           echo "========================================"
-          echo "PATCHED MAKEFILE"
+          echo "MAKEFILE READY"
           echo "========================================"
-
-          sed -n '1,100p' Makefile
 
           test -f \
             mgba/build-hoenn-3ds/libmgba-static.a
 
       # ============================================================
-      # 11. BUILD HOENN REBORN
+      # 10. BUILD HOENN REBORN
       # ============================================================
       - name: Build Hoenn Reborn
         shell: bash
@@ -566,23 +500,6 @@ jobs:
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:/opt/hoenn-tools:$PATH"
 
           cd project
-
-          echo "========================================"
-          echo "VERIFY TOOLS"
-          echo "========================================"
-
-          command -v bannertool
-          command -v makerom
-          command -v 3dsxtool
-          command -v smdhtool
-          command -v tex3ds
-
-          echo "========================================"
-          echo "VERIFY mGBA"
-          echo "========================================"
-
-          ls -lh \
-            mgba/build-hoenn-3ds/libmgba-static.a
 
           echo "========================================"
           echo "BUILDING HOENN REBORN"
@@ -602,7 +519,7 @@ jobs:
             Hoenn_Reborn.bnr
 
       # ============================================================
-      # 12. VERIFY CIA
+      # 11. VERIFY CIA
       # ============================================================
       - name: Verify CIA
         shell: bash
@@ -614,11 +531,11 @@ jobs:
           test -f Hoenn_Reborn.cia
           test -s Hoenn_Reborn.cia
 
-          echo "CIA size:"
+          echo "CIA SIZE:"
           wc -c Hoenn_Reborn.cia
 
       # ============================================================
-      # 13. VERIFY 3DSX
+      # 12. VERIFY 3DSX
       # ============================================================
       - name: Verify 3DSX
         shell: bash
@@ -630,11 +547,11 @@ jobs:
           test -f Hoenn_Reborn.3dsx
           test -s Hoenn_Reborn.3dsx
 
-          echo "3DSX size:"
+          echo "3DSX SIZE:"
           wc -c Hoenn_Reborn.3dsx
 
       # ============================================================
-      # 14. UPLOAD CIA
+      # 13. UPLOAD CIA
       # ============================================================
       - name: Upload CIA
         if: success()
@@ -645,7 +562,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # 15. UPLOAD 3DSX
+      # 14. UPLOAD 3DSX
       # ============================================================
       - name: Upload 3DSX
         if: success()
@@ -656,7 +573,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # 16. UPLOAD ELF
+      # 15. UPLOAD ELF
       # ============================================================
       - name: Upload ELF
         if: success()
@@ -667,7 +584,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # 17. UPLOAD BUILD LOGS
+      # 16. UPLOAD BUILD LOGS
       # ============================================================
       - name: Upload build logs
         if: always()
