@@ -69,7 +69,7 @@ jobs:
       - name: Build mGBA core
         run: |
           cmake --build mgba/build \
-            --target mgba-static \
+            --target mgba \
             --parallel 2
 
       - name: Prepare mGBA headers and library
@@ -85,8 +85,13 @@ jobs:
               project/vendor/mgba/include/
           fi
 
-          cp mgba/build/libmgba.a \
-            project/vendor/mgba/lib/libmgba.a
+          if [ -f mgba/build/libmgba.a ]; then
+            cp mgba/build/libmgba.a \
+              project/vendor/mgba/lib/libmgba.a
+          else
+            find mgba/build -name "libmgba*.a" -print
+            exit 1
+          fi
 
       - name: Build Hoenn Reborn
         working-directory: project
