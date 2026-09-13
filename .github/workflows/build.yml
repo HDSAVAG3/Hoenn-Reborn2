@@ -18,7 +18,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Verify 3DS development environment
+      - name: Initialize devkitPro environment
         run: |
           echo "===== DEVKITPRO ====="
           echo "$DEVKITPRO"
@@ -26,20 +26,53 @@ jobs:
           echo "===== DEVKITARM ====="
           echo "$DEVKITARM"
 
+          export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
+
+          echo "PATH=$PATH"
+
           echo "===== ARM GCC ====="
-          arm-none-eabi-gcc --version
+          "$DEVKITARM/bin/arm-none-eabi-gcc" --version
 
-          echo "===== MAKE ====="
-          make --version
-
-          echo "===== CMAKE ====="
-          cmake --version
+          echo "===== ARM G++ ====="
+          "$DEVKITARM/bin/arm-none-eabi-g++" --version
 
           echo "===== 3DS TOOLS ====="
           which makerom || true
           which bannertool || true
           which 3dsxtool || true
           which tex3ds || true
+
+          echo "DEVKITPRO=$DEVKITPRO" >> "$GITHUB_ENV"
+          echo "DEVKITARM=$DEVKITARM" >> "$GITHUB_ENV"
+          echo "PATH=$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH" >> "$GITHUB_ENV"
+
+      - name: Verify devkitPro environment
+        run: |
+          echo "===== ENVIRONMENT ====="
+
+          echo "DEVKITPRO=$DEVKITPRO"
+          echo "DEVKITARM=$DEVKITARM"
+
+          echo "===== GCC ====="
+
+          command -v arm-none-eabi-gcc
+          arm-none-eabi-gcc --version
+
+          echo "===== G++ ====="
+
+          command -v arm-none-eabi-g++
+          arm-none-eabi-g++ --version
+
+          echo "===== AR ====="
+
+          command -v arm-none-eabi-ar
+
+          echo "===== 3DS TOOLS ====="
+
+          command -v makerom || true
+          command -v bannertool || true
+          command -v 3dsxtool || true
+          command -v tex3ds || true
 
       - name: Extract Hoenn Reborn project
         run: |
@@ -48,7 +81,11 @@ jobs:
           unzip -o Hoenn_Reborn_GitHub_Build.zip -d project
 
           echo "===== PROJECT CONTENTS ====="
-          find project -maxdepth 3 -type f | sort
+
+          find project \
+            -maxdepth 3 \
+            -type f \
+            | sort
 
       - name: Download mGBA 0.10.5
         run: |
@@ -184,10 +221,12 @@ jobs:
             project/mgba/include
 
           echo "Library:"
+
           ls -lh \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
           echo "Headers:"
+
           find project/mgba/include \
             -type f \
             | head -50
@@ -220,7 +259,10 @@ jobs:
 
       - name: Verify CIA exists
         run: |
-          CIA=$(find project -type f -name "*.cia" | head -n 1)
+          CIA=$(find project \
+            -type f \
+            -name "*.cia" \
+            | head -n 1)
 
           if [ -z "$CIA" ]; then
             echo "ERROR: CIA was not created."
