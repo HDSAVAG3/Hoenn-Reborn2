@@ -53,6 +53,24 @@ jobs:
 
 
       # ============================================================
+      # INSTALL SYSTEM TOOLS
+      # ============================================================
+
+      - name: Install required Linux tools
+        run: |
+          set -e
+
+          echo "Installing zstd..."
+
+          apt-get update
+          apt-get install -y zstd
+
+          echo ""
+          echo "zstd version:"
+          zstd --version
+
+
+      # ============================================================
       # EXTRACT HOENN REBORN PROJECT
       # ============================================================
 
@@ -125,7 +143,6 @@ jobs:
           echo "=========================================="
 
           rm -rf project
-
           mkdir -p project
 
           cp -R "$PROJECT_DIR"/. project/
@@ -178,6 +195,11 @@ jobs:
 
           cd /tmp/3ds-tools
 
+
+          # --------------------------------------------------------
+          # BANNERTool
+          # --------------------------------------------------------
+
           echo "=========================================="
           echo "DOWNLOADING BANNERTool"
           echo "=========================================="
@@ -187,7 +209,10 @@ jobs:
 
           unzip -o bannertool.zip
 
-          BANNER=$(find . -type f -name "bannertool" | head -n 1)
+          BANNER=$(find . \
+            -type f \
+            -name "bannertool" \
+            | head -n 1)
 
           if [ -z "$BANNER" ]; then
             echo "ERROR: bannertool was not found."
@@ -195,9 +220,16 @@ jobs:
             exit 1
           fi
 
-          cp "$BANNER" "$DEVKITPRO/tools/bin/bannertool"
-          chmod +x "$DEVKITPRO/tools/bin/bannertool"
+          cp "$BANNER" \
+            "$DEVKITPRO/tools/bin/bannertool"
 
+          chmod +x \
+            "$DEVKITPRO/tools/bin/bannertool"
+
+
+          # --------------------------------------------------------
+          # MAKEROM
+          # --------------------------------------------------------
 
           echo "=========================================="
           echo "DOWNLOADING MAKEROM"
@@ -208,7 +240,10 @@ jobs:
 
           unzip -o makerom.zip
 
-          MAKEROM=$(find . -type f -name "makerom" | head -n 1)
+          MAKEROM=$(find . \
+            -type f \
+            -name "makerom" \
+            | head -n 1)
 
           if [ -z "$MAKEROM" ]; then
             echo "ERROR: makerom was not found."
@@ -216,9 +251,16 @@ jobs:
             exit 1
           fi
 
-          cp "$MAKEROM" "$DEVKITPRO/tools/bin/makerom"
-          chmod +x "$DEVKITPRO/tools/bin/makerom"
+          cp "$MAKEROM" \
+            "$DEVKITPRO/tools/bin/makerom"
 
+          chmod +x \
+            "$DEVKITPRO/tools/bin/makerom"
+
+
+          # --------------------------------------------------------
+          # 3DSTOOLS
+          # --------------------------------------------------------
 
           echo "=========================================="
           echo "DOWNLOADING 3DSTOOLS"
@@ -227,15 +269,24 @@ jobs:
           wget -O 3dstools.pkg.tar.zst \
             "https://wii.leseratte10.de/devkitPro/other-stuff/3dstools/3dstools-1.3.1-3-linux_x86_64.pkg.tar.zst"
 
+          echo ""
+          echo "Downloaded 3dstools package:"
+          ls -lh 3dstools.pkg.tar.zst
+
           mkdir -p /tmp/3dstools-package
+
+          echo ""
+          echo "Extracting 3dstools..."
 
           tar --zstd \
             -xf 3dstools.pkg.tar.zst \
             -C /tmp/3dstools-package
 
           echo ""
-          echo "3dstools package:"
-          find /tmp/3dstools-package -type f | head -100
+          echo "3dstools package contents:"
+          find /tmp/3dstools-package \
+            -type f \
+            | head -100
 
 
           FOUND_3DSXTOOL=$(find /tmp/3dstools-package \
@@ -269,6 +320,10 @@ jobs:
             "$DEVKITPRO/tools/bin/smdhtool"
 
 
+          # --------------------------------------------------------
+          # TEX3DS
+          # --------------------------------------------------------
+
           echo "=========================================="
           echo "DOWNLOADING TEX3DS"
           echo "=========================================="
@@ -276,11 +331,19 @@ jobs:
           wget -O tex3ds.pkg.tar.zst \
             "https://wii.leseratte10.de/devkitPro/other-stuff/tex3ds/tex3ds-2.3.0-4-linux_x86_64.pkg.tar.zst"
 
+          echo ""
+          echo "Downloaded tex3ds package:"
+          ls -lh tex3ds.pkg.tar.zst
+
           mkdir -p /tmp/tex3ds-package
+
+          echo ""
+          echo "Extracting tex3ds..."
 
           tar --zstd \
             -xf tex3ds.pkg.tar.zst \
             -C /tmp/tex3ds-package
+
 
           FOUND_TEX3DS=$(find /tmp/tex3ds-package \
             -type f \
@@ -295,8 +358,13 @@ jobs:
           cp "$FOUND_TEX3DS" \
             "$DEVKITPRO/tools/bin/tex3ds"
 
-          chmod +x "$DEVKITPRO/tools/bin/tex3ds"
+          chmod +x \
+            "$DEVKITPRO/tools/bin/tex3ds"
 
+
+          # --------------------------------------------------------
+          # VERIFY TOOLS
+          # --------------------------------------------------------
 
           echo ""
           echo "=========================================="
@@ -305,14 +373,23 @@ jobs:
 
           export PATH="$DEVKITPRO/tools/bin:$DEVKITARM/bin:$PATH"
 
+          echo "bannertool:"
           command -v bannertool
+
+          echo "makerom:"
           command -v makerom
+
+          echo "3dsxtool:"
           command -v 3dsxtool
+
+          echo "smdhtool:"
           command -v smdhtool
+
+          echo "tex3ds:"
           command -v tex3ds
 
           echo ""
-          echo "All required 3DS tools are available."
+          echo "ALL 3DS PACKAGING TOOLS ARE AVAILABLE."
 
 
       # ============================================================
@@ -453,10 +530,12 @@ jobs:
         run: |
           set -e
 
-          test -s project/mgba/build-hoenn-3ds/libmgba-static.a
+          test -s \
+            project/mgba/build-hoenn-3ds/libmgba-static.a
 
           echo "mGBA library:"
-          ls -lh project/mgba/build-hoenn-3ds/libmgba-static.a
+          ls -lh \
+            project/mgba/build-hoenn-3ds/libmgba-static.a
 
 
       # ============================================================
@@ -477,7 +556,7 @@ jobs:
           old = """mgba-core:
           \t@mkdir -p "$(MGBA_BUILD)"
           \tcmake -S "$(MGBA_DIR)" -B "$(MGBA_BUILD)" \\
-          \t\t-DCMAKE_TOOLCHAIN_FILE="$(MGBA_DIR)/src/platform/3ds/CMakeToolchain.txt" \\
+          \t\t-DCMAKE_TOOLCHAIN_FILE="$(MGBA_DIR)/src/platform/3DS/CMakeToolchain.txt" \\
           \t\t-D3DS=ON -DLIBMGBA_ONLY=ON -DBUILD_STATIC=ON -DBUILD_SHARED=OFF \\
           \t\t-DM_CORE_GBA=ON -DM_CORE_GB=OFF -DDISABLE_DEPS=ON -DBUILD_LTO=OFF
           \tcmake --build "$(MGBA_BUILD)" --target mgba-static -j
@@ -507,11 +586,13 @@ jobs:
         run: |
           set -e
 
-          test -s mgba/build-hoenn-3ds/libmgba-static.a
+          test -s \
+            mgba/build-hoenn-3ds/libmgba-static.a
 
           echo "Hoenn Reborn mGBA library verified."
 
-          ls -lh mgba/build-hoenn-3ds/libmgba-static.a
+          ls -lh \
+            mgba/build-hoenn-3ds/libmgba-static.a
 
 
       # ============================================================
@@ -526,7 +607,7 @@ jobs:
           export PATH="$DEVKITPRO/tools/bin:$DEVKITARM/bin:$PATH"
 
           echo "=========================================="
-          echo "BUILD TOOLS"
+          echo "VERIFYING BUILD TOOLS"
           echo "=========================================="
 
           command -v arm-none-eabi-gcc
@@ -547,7 +628,8 @@ jobs:
           echo "VERIFY mGBA"
           echo "=========================================="
 
-          test -s mgba/build-hoenn-3ds/libmgba-static.a
+          test -s \
+            mgba/build-hoenn-3ds/libmgba-static.a
 
           echo ""
           echo "=========================================="
@@ -594,7 +676,10 @@ jobs:
 
           test -s Hoenn_Reborn.cia
 
-          echo "CIA successfully created!"
+          echo ""
+          echo "=========================================="
+          echo "CIA SUCCESSFULLY CREATED"
+          echo "=========================================="
 
           ls -lh Hoenn_Reborn.cia
 
