@@ -23,7 +23,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-
       # ============================================================
       # 2. BASIC TOOLS
       # ============================================================
@@ -44,7 +43,6 @@ jobs:
             cmake \
             make \
             git
-
 
       # ============================================================
       # 3. DEVKITPRO ENVIRONMENT
@@ -67,13 +65,9 @@ jobs:
 
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
 
-          echo "DEVKITPRO=$DEVKITPRO"
-          echo "DEVKITARM=$DEVKITARM"
-
           arm-none-eabi-gcc --version
           make --version
           cmake --version
-
 
       # ============================================================
       # 4. EXTRACT PROJECT
@@ -106,22 +100,15 @@ jobs:
 
           MAKEFILE_PATH="$(find /tmp/hoenn_extract \
             -type f \
-            -name 'Makefile' \
+            -name Makefile \
             | head -n 1)"
 
           if [ -z "$MAKEFILE_PATH" ]; then
             echo "ERROR: Makefile not found."
-            find /tmp/hoenn_extract \
-              -maxdepth 5 \
-              -type f \
-              | head -200
             exit 1
           fi
 
           PROJECT_SOURCE="$(dirname "$MAKEFILE_PATH")"
-
-          echo "Project source:"
-          echo "$PROJECT_SOURCE"
 
           rm -rf project
           mkdir -p project
@@ -131,7 +118,6 @@ jobs:
             project/
 
           echo "Project extracted."
-
 
       # ============================================================
       # 5. BANNERTOOL
@@ -159,15 +145,11 @@ jobs:
 
           if [ -z "$BANNER_BIN" ]; then
             echo "ERROR: x86_64 bannertool not found."
-
-            find /tmp/bannertool_extract \
-              -type f
-
+            find /tmp/bannertool_extract -type f
             exit 1
           fi
 
-          cp \
-            "$BANNER_BIN" \
+          cp "$BANNER_BIN" \
             /usr/local/bin/bannertool
 
           chmod +x \
@@ -177,7 +159,6 @@ jobs:
             /usr/local/bin/bannertool
 
           command -v bannertool
-
 
       # ============================================================
       # 6. MAKEROM
@@ -205,22 +186,18 @@ jobs:
 
           if [ -z "$MAKEROM_BIN" ]; then
             echo "ERROR: makerom not found."
-            find /tmp/makerom -type f
             exit 1
           fi
 
-          chmod +x \
-            "$MAKEROM_BIN"
+          chmod +x "$MAKEROM_BIN"
 
-          cp \
-            "$MAKEROM_BIN" \
+          cp "$MAKEROM_BIN" \
             /usr/local/bin/makerom
 
           chmod +x \
             /usr/local/bin/makerom
 
           command -v makerom
-
 
       # ============================================================
       # 7. 3DS TOOLS
@@ -254,7 +231,6 @@ jobs:
 
           echo "/opt/devkitpro/tools/bin" >> "$GITHUB_PATH"
 
-
       # ============================================================
       # 8. TEX3DS
       # ============================================================
@@ -287,7 +263,6 @@ jobs:
 
           echo "/opt/devkitpro/tools/bin" >> "$GITHUB_PATH"
 
-
       # ============================================================
       # 9. VERIFY TOOLS
       # ============================================================
@@ -308,7 +283,6 @@ jobs:
             -name 3dsxtool \
             -print \
             | head -20
-
 
       # ============================================================
       # 10. DOWNLOAD MGBA
@@ -335,7 +309,6 @@ jobs:
 
           test -f \
             "$GITHUB_WORKSPACE/mgba/CMakeLists.txt"
-
 
       # ============================================================
       # 11. BUILD MGBA
@@ -383,9 +356,7 @@ jobs:
             exit 1
           fi
 
-          ls -lh \
-            "$MGBA_LIB_SRC"
-
+          ls -lh "$MGBA_LIB_SRC"
 
       # ============================================================
       # 12. STAGE MGBA
@@ -396,8 +367,7 @@ jobs:
         run: |
           set -eux
 
-          rm -rf \
-            project/mgba
+          rm -rf project/mgba
 
           cp -a \
             "$GITHUB_WORKSPACE/mgba" \
@@ -436,7 +406,6 @@ jobs:
           test -s \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
-
       # ============================================================
       # 13. BUILD 3DS LIBRARIES
       # ============================================================
@@ -459,7 +428,6 @@ jobs:
 
           cd /tmp/3ds-libraries
 
-
           # ========================================================
           # LIBCTRU
           # ========================================================
@@ -473,51 +441,88 @@ jobs:
           LIBCTRU_ROOT="/tmp/3ds-libraries/libctru-2.7.0"
 
           echo "========================================"
-          echo "LIBCTRU SOURCE"
+          echo "LOCATING GDBHIO.C"
           echo "========================================"
 
           find "$LIBCTRU_ROOT" \
-            -maxdepth 3 \
             -type f \
-            | head -100
-
+            -name gdbhio.c \
+            -print
 
           # --------------------------------------------------------
-          # Fix GCC warning treated as error.
-          #
-          # gdbMode is currently set but unused in this libctru
-          # source configuration.
+          # Patch EVERY gdbhio.c.
           # --------------------------------------------------------
 
-          GDB_SOURCE="$LIBCTRU_ROOT/libctru/source/gdbhio.c"
-
-          if [ -f "$GDB_SOURCE" ]; then
-
-            echo "Patching gdbhio.c warning..."
-
-            python3 - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
+          import re
 
-          p = Path("/tmp/3ds-libraries/libctru-2.7.0/libctru/source/gdbhio.c")
+          root = Path("/tmp/3ds-libraries/libctru-2.7.0")
 
-          s = p.read_text()
+          files = list(root.rglob("gdbhio.c"))
 
-          old = "gdbMode_t gdbMode = 0;"
+          if not files:
+              raise SystemExit("ERROR: gdbhio.c was not found")
 
-          new = """gdbMode_t gdbMode = 0;
-          (void)gdbMode;"""
+          patched = 0
 
-          if old in s and "(void)gdbMode;" not in s:
-              s = s.replace(old, new, 1)
+          for p in files:
+              s = p.read_text()
 
-          p.write_text(s)
+              # Match the declaration regardless of whitespace.
+              pattern = r'(?m)^(\s*)gdbMode_t\s+gdbMode\s*=\s*0\s*;\s*$'
+
+              replacement = (
+                  r'\1gdbMode_t gdbMode = 0;\n'
+                  r'\1(void)gdbMode;'
+              )
+
+              new_s, count = re.subn(
+                  pattern,
+                  replacement,
+                  s,
+                  count=1
+              )
+
+              if count:
+                  p.write_text(new_s)
+                  patched += 1
+                  print(f"PATCHED: {p}")
+              else:
+                  print(f"NO MATCH: {p}")
+
+          if patched == 0:
+              raise SystemExit(
+                  "ERROR: gdbMode declaration could not be patched"
+              )
+
+          print(f"Patched {patched} gdbhio.c file(s).")
           PY
 
-          fi
+          echo "========================================"
+          echo "VERIFYING GDBHIO PATCH"
+          echo "========================================"
 
+          GDB_FILES="$(find "$LIBCTRU_ROOT" \
+            -type f \
+            -name gdbhio.c)"
+
+          echo "$GDB_FILES"
+
+          for f in $GDB_FILES; do
+              echo "---- $f ----"
+              grep -n -A2 -B2 \
+                'gdbMode_t gdbMode' \
+                "$f" \
+                || true
+
+              grep -n \
+                '(void)gdbMode' \
+                "$f"
+          done
 
           # --------------------------------------------------------
-          # Locate actual libctru Makefile.
+          # Locate Makefile.
           # --------------------------------------------------------
 
           LIBCTRU_MAKEFILE="$(find \
@@ -527,18 +532,14 @@ jobs:
             | head -n 1)"
 
           if [ -z "$LIBCTRU_MAKEFILE" ]; then
-            echo "ERROR: libctru Makefile not found."
-            exit 1
+              echo "ERROR: libctru Makefile not found."
+              exit 1
           fi
 
           LIBCTRU_DIR="$(dirname "$LIBCTRU_MAKEFILE")"
 
-          echo "libctru Makefile:"
-          echo "$LIBCTRU_MAKEFILE"
-
-          echo "libctru build directory:"
+          echo "libctru directory:"
           echo "$LIBCTRU_DIR"
-
 
           # --------------------------------------------------------
           # Build libctru.
@@ -551,7 +552,6 @@ jobs:
           make \
             -C "$LIBCTRU_DIR" \
             install
-
 
           # ========================================================
           # CITRO3D
@@ -572,14 +572,11 @@ jobs:
             | head -n 1)"
 
           if [ -z "$CITRO3D_MAKEFILE" ]; then
-            echo "ERROR: citro3d Makefile not found."
-            exit 1
+              echo "ERROR: citro3d Makefile not found."
+              exit 1
           fi
 
           CITRO3D_DIR="$(dirname "$CITRO3D_MAKEFILE")"
-
-          echo "citro3d directory:"
-          echo "$CITRO3D_DIR"
 
           make \
             -C "$CITRO3D_DIR" \
@@ -588,7 +585,6 @@ jobs:
           make \
             -C "$CITRO3D_DIR" \
             install
-
 
           # ========================================================
           # CITRO2D
@@ -609,14 +605,11 @@ jobs:
             | head -n 1)"
 
           if [ -z "$CITRO2D_MAKEFILE" ]; then
-            echo "ERROR: citro2d Makefile not found."
-            exit 1
+              echo "ERROR: citro2d Makefile not found."
+              exit 1
           fi
 
           CITRO2D_DIR="$(dirname "$CITRO2D_MAKEFILE")"
-
-          echo "citro2d directory:"
-          echo "$CITRO2D_DIR"
 
           make \
             -C "$CITRO2D_DIR" \
@@ -625,7 +618,6 @@ jobs:
           make \
             -C "$CITRO2D_DIR" \
             install
-
 
           # ========================================================
           # VERIFY LIBRARIES
@@ -655,10 +647,7 @@ jobs:
           test -f \
             "$DEVKITPRO/libctru/lib/libcitro2d.a"
 
-          echo "========================================"
           echo "ALL 3DS LIBRARIES READY"
-          echo "========================================"
-
 
       # ============================================================
       # 14. PATCH HOENN REBORN MAKEFILE
@@ -676,19 +665,16 @@ jobs:
 
           s = p.read_text()
 
-          # Correct mGBA directory.
           s = s.replace(
               "MGBA_DIR ?= ../mgba",
               "MGBA_DIR ?= ./mgba"
           )
 
-          # Correct tex3ds PNG syntax.
           s = s.replace(
               "tex3ds -i $< -o $@",
               'tex3ds "$<" -o "$@"'
           )
 
-          # Prevent make from attempting to rebuild mGBA.
           if "mgba-core:" in s and "\n3dsx:" in s:
               start = s.index("mgba-core:")
               end = s.index("\n3dsx:", start)
@@ -706,7 +692,6 @@ jobs:
           p.write_text(s)
           PY
 
-
       # ============================================================
       # 15. VERIFY MAKEFILE
       # ============================================================
@@ -716,40 +701,29 @@ jobs:
         run: |
           set -eux
 
-          echo "========================================"
-          echo "MGBA SETTINGS"
-          echo "========================================"
-
           grep -n \
             -E 'MGBA_DIR|MGBA_LIB|MGBA_INC|MGBA_GEN_INC' \
             project/Makefile \
             || true
 
-          echo "========================================"
-          echo "TEX3DS"
-          echo "========================================"
+          echo "--------------------------------"
 
           grep -n \
             tex3ds \
             project/Makefile \
             || true
 
-          echo "========================================"
-          echo "LIBS"
-          echo "========================================"
+          echo "--------------------------------"
 
           grep -n \
             '^LIBS' \
             project/Makefile \
             || true
 
-          echo "========================================"
-          echo "MGBA LIBRARY"
-          echo "========================================"
+          echo "--------------------------------"
 
           test -s \
             project/mgba/build-hoenn-3ds/libmgba-static.a
-
 
       # ============================================================
       # 16. BUILD HOENN REBORN
@@ -773,7 +747,6 @@ jobs:
 
           make -j1
 
-
       # ============================================================
       # 17. VERIFY CIA
       # ============================================================
@@ -791,7 +764,6 @@ jobs:
 
           wc -c \
             project/Hoenn_Reborn.cia
-
 
       # ============================================================
       # 18. VERIFY 3DSX
@@ -811,7 +783,6 @@ jobs:
           wc -c \
             project/Hoenn_Reborn.3dsx
 
-
       # ============================================================
       # 19. VERIFY ELF
       # ============================================================
@@ -830,7 +801,6 @@ jobs:
           wc -c \
             project/Hoenn_Reborn.elf
 
-
       # ============================================================
       # 20. UPLOAD CIA
       # ============================================================
@@ -842,7 +812,6 @@ jobs:
           name: Hoenn_Reborn_CIA
           path: project/Hoenn_Reborn.cia
           if-no-files-found: error
-
 
       # ============================================================
       # 21. UPLOAD 3DSX
@@ -856,7 +825,6 @@ jobs:
           path: project/Hoenn_Reborn.3dsx
           if-no-files-found: error
 
-
       # ============================================================
       # 22. UPLOAD ELF
       # ============================================================
@@ -868,7 +836,6 @@ jobs:
           name: Hoenn_Reborn_ELF
           path: project/Hoenn_Reborn.elf
           if-no-files-found: error
-
 
       # ============================================================
       # 23. ALWAYS UPLOAD BUILD FILES
