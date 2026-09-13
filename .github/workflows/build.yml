@@ -45,7 +45,7 @@ jobs:
             git
 
       # ============================================================
-      # 3. DEVKITPRO ENVIRONMENT
+      # 3. DEVKITPRO
       # ============================================================
 
       - name: Configure devkitPro
@@ -61,7 +61,6 @@ jobs:
 
           echo "$DEVKITARM/bin" >> "$GITHUB_PATH"
           echo "$DEVKITPRO/tools/bin" >> "$GITHUB_PATH"
-          echo "$DEVKITPRO/devkitARM/bin" >> "$GITHUB_PATH"
 
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
 
@@ -420,11 +419,9 @@ jobs:
 
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
 
-          rm -rf \
-            /tmp/3ds-libraries
+          rm -rf /tmp/3ds-libraries
 
-          mkdir -p \
-            /tmp/3ds-libraries
+          mkdir -p /tmp/3ds-libraries
 
           cd /tmp/3ds-libraries
 
@@ -441,7 +438,7 @@ jobs:
           LIBCTRU_ROOT="/tmp/3ds-libraries/libctru-2.7.0"
 
           echo "========================================"
-          echo "LOCATING GDBHIO.C"
+          echo "LIBCTRU SOURCE"
           echo "========================================"
 
           find "$LIBCTRU_ROOT" \
@@ -449,81 +446,12 @@ jobs:
             -name gdbhio.c \
             -print
 
-          # --------------------------------------------------------
-          # Patch EVERY gdbhio.c.
-          # --------------------------------------------------------
-
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          root = Path("/tmp/3ds-libraries/libctru-2.7.0")
-
-          files = list(root.rglob("gdbhio.c"))
-
-          if not files:
-              raise SystemExit("ERROR: gdbhio.c was not found")
-
-          patched = 0
-
-          for p in files:
-              s = p.read_text()
-
-              # Match the declaration regardless of whitespace.
-              pattern = r'(?m)^(\s*)gdbMode_t\s+gdbMode\s*=\s*0\s*;\s*$'
-
-              replacement = (
-                  r'\1gdbMode_t gdbMode = 0;\n'
-                  r'\1(void)gdbMode;'
-              )
-
-              new_s, count = re.subn(
-                  pattern,
-                  replacement,
-                  s,
-                  count=1
-              )
-
-              if count:
-                  p.write_text(new_s)
-                  patched += 1
-                  print(f"PATCHED: {p}")
-              else:
-                  print(f"NO MATCH: {p}")
-
-          if patched == 0:
-              raise SystemExit(
-                  "ERROR: gdbMode declaration could not be patched"
-              )
-
-          print(f"Patched {patched} gdbhio.c file(s).")
-          PY
-
-          echo "========================================"
-          echo "VERIFYING GDBHIO PATCH"
-          echo "========================================"
-
-          GDB_FILES="$(find "$LIBCTRU_ROOT" \
-            -type f \
-            -name gdbhio.c)"
-
-          echo "$GDB_FILES"
-
-          for f in $GDB_FILES; do
-              echo "---- $f ----"
-              grep -n -A2 -B2 \
-                'gdbMode_t gdbMode' \
-                "$f" \
-                || true
-
-              grep -n \
-                '(void)gdbMode' \
-                "$f"
-          done
-
-          # --------------------------------------------------------
-          # Locate Makefile.
-          # --------------------------------------------------------
+          # ========================================================
+          # BUILD LIBCTRU
+          #
+          # This specifically disables the warning that the current
+          # libctru source triggers with the current devkitARM.
+          # ========================================================
 
           LIBCTRU_MAKEFILE="$(find \
             "$LIBCTRU_ROOT" \
@@ -532,8 +460,8 @@ jobs:
             | head -n 1)"
 
           if [ -z "$LIBCTRU_MAKEFILE" ]; then
-              echo "ERROR: libctru Makefile not found."
-              exit 1
+            echo "ERROR: libctru Makefile not found."
+            exit 1
           fi
 
           LIBCTRU_DIR="$(dirname "$LIBCTRU_MAKEFILE")"
@@ -541,12 +469,14 @@ jobs:
           echo "libctru directory:"
           echo "$LIBCTRU_DIR"
 
-          # --------------------------------------------------------
-          # Build libctru.
-          # --------------------------------------------------------
+          echo "========================================"
+          echo "BUILDING LIBCTRU"
+          echo "========================================"
 
           make \
             -C "$LIBCTRU_DIR" \
+            CFLAGS="-Wno-unused-but-set-variable" \
+            CXXFLAGS="-Wno-unused-but-set-variable" \
             -j2
 
           make \
@@ -572,11 +502,15 @@ jobs:
             | head -n 1)"
 
           if [ -z "$CITRO3D_MAKEFILE" ]; then
-              echo "ERROR: citro3d Makefile not found."
-              exit 1
+            echo "ERROR: citro3d Makefile not found."
+            exit 1
           fi
 
           CITRO3D_DIR="$(dirname "$CITRO3D_MAKEFILE")"
+
+          echo "========================================"
+          echo "BUILDING CITRO3D"
+          echo "========================================"
 
           make \
             -C "$CITRO3D_DIR" \
@@ -605,11 +539,15 @@ jobs:
             | head -n 1)"
 
           if [ -z "$CITRO2D_MAKEFILE" ]; then
-              echo "ERROR: citro2d Makefile not found."
-              exit 1
+            echo "ERROR: citro2d Makefile not found."
+            exit 1
           fi
 
           CITRO2D_DIR="$(dirname "$CITRO2D_MAKEFILE")"
+
+          echo "========================================"
+          echo "BUILDING CITRO2D"
+          echo "========================================"
 
           make \
             -C "$CITRO2D_DIR" \
@@ -620,7 +558,7 @@ jobs:
             install
 
           # ========================================================
-          # VERIFY LIBRARIES
+          # VERIFY
           # ========================================================
 
           echo "========================================"
@@ -665,16 +603,20 @@ jobs:
 
           s = p.read_text()
 
+          # mGBA is staged inside project/mgba.
           s = s.replace(
               "MGBA_DIR ?= ../mgba",
               "MGBA_DIR ?= ./mgba"
           )
 
+          # tex3ds takes the PNG as the positional input.
           s = s.replace(
               "tex3ds -i $< -o $@",
               'tex3ds "$<" -o "$@"'
           )
 
+          # Prevent Make from trying to rebuild the already-staged
+          # mGBA library.
           if "mgba-core:" in s and "\n3dsx:" in s:
               start = s.index("mgba-core:")
               end = s.index("\n3dsx:", start)
@@ -701,26 +643,39 @@ jobs:
         run: |
           set -eux
 
+          echo "========================================"
+          echo "MGBA SETTINGS"
+          echo "========================================"
+
           grep -n \
             -E 'MGBA_DIR|MGBA_LIB|MGBA_INC|MGBA_GEN_INC' \
             project/Makefile \
             || true
 
-          echo "--------------------------------"
+          echo "========================================"
+          echo "TEX3DS COMMAND"
+          echo "========================================"
 
           grep -n \
             tex3ds \
             project/Makefile \
             || true
 
-          echo "--------------------------------"
+          echo "========================================"
+          echo "LINKER LIBRARIES"
+          echo "========================================"
 
           grep -n \
             '^LIBS' \
             project/Makefile \
             || true
 
-          echo "--------------------------------"
+          echo "========================================"
+          echo "MGBA LIBRARY"
+          echo "========================================"
+
+          ls -lh \
+            project/mgba/build-hoenn-3ds/libmgba-static.a
 
           test -s \
             project/mgba/build-hoenn-3ds/libmgba-static.a
