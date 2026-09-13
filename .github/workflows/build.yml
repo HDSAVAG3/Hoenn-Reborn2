@@ -17,7 +17,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract project
+      - name: Extract Hoenn Reborn project
         run: |
           mkdir -p project
           unzip -o Hoenn_Reborn_GitHub_Build.zip -d project
@@ -31,67 +31,110 @@ jobs:
 
       - name: Download mGBA 0.10.5
         run: |
-          git clone --depth 1 --branch 0.10.5 \
-            https://github.com/mgba-emu/mgba.git mgba
+          git clone \
+            --depth 1 \
+            --branch 0.10.5 \
+            https://github.com/mgba-emu/mgba.git \
+            mgba
 
       - name: Configure mGBA
         run: |
           mkdir -p mgba/build
-          cd mgba/build
 
-          cmake .. \
-            -DCMAKE_TOOLCHAIN_FILE=../src/platform/3ds/CMakeToolchain.txt \
+          cmake \
+            -S mgba \
+            -B mgba/build \
+            -DCMAKE_TOOLCHAIN_FILE=mgba/src/platform/3ds/CMakeToolchain.txt \
             -DCMAKE_BUILD_TYPE=Release \
+            -D3DS=ON \
             -DLIBMGBA_ONLY=ON \
             -DBUILD_STATIC=ON \
             -DBUILD_SHARED=OFF \
             -DSKIP_LIBRARY=OFF \
             -DM_CORE_GBA=ON \
             -DM_CORE_GB=OFF \
-            -DMINIMAL_CORE=ON \
-            -DDISABLE_FRONTENDS=ON \
-            -DBUILD_SDL=OFF \
-            -DBUILD_QT=OFF \
-            -DBUILD_GL=OFF \
-            -DBUILD_GLES2=OFF \
-            -DBUILD_GLES3=OFF \
+            -DDISABLE_DEPS=ON \
+            -DBUILD_LTO=OFF \
             -DUSE_PNG=OFF \
             -DUSE_ZLIB=OFF \
-            -DUSE_LUA=OFF \
             -DENABLE_SCRIPTING=OFF \
             -DBUILD_TEST=OFF \
             -DBUILD_SUITE=OFF \
-            -DBUILD_CINEMA=OFF \
             -DBUILD_EXAMPLE=OFF \
-            -DBUILD_PERF=OFF \
-            -DDISABLE_DEPS=ON
+            -DBUILD_PERF=OFF
 
       - name: Build mGBA core
         run: |
-          cmake --build mgba/build \
+          cmake \
+            --build mgba/build \
             --target mgba \
             --parallel 2
 
-      - name: Prepare mGBA headers and library
+      - name: Prepare mGBA for Hoenn Reborn
         run: |
-          mkdir -p project/vendor/mgba/include
-          mkdir -p project/vendor/mgba/lib
+          echo "===== Searching for mGBA libraries ====="
 
-          cp -R mgba/include/mgba \
-            project/vendor/mgba/include/
+          find mgba/build \
+            -type f \
+            \( -name "libmgba*.a" -o -name "libmgba*.so" \) \
+            -print
 
-          if [ -d mgba/include/mgba-util ]; then
-            cp -R mgba/include/mgba-util \
-              project/vendor/mgba/include/
-          fi
+          echo "===== Searching for generated headers ====="
+
+          find mgba/build/include \
+            -type f \
+            -print 2>/dev/null || true
+
+          mkdir -p \
+            project/mgba/build-hoenn-3ds \
+            project/mgba/build-hoenn-3ds/include
+
+          LIB=""
 
           if [ -f mgba/build/libmgba.a ]; then
-            cp mgba/build/libmgba.a \
-              project/vendor/mgba/lib/libmgba.a
-          else
-            find mgba/build -name "libmgba*.a" -print
+            LIB="mgba/build/libmgba.a"
+          fi
+
+          if [ -z "$LIB" ]; then
+            LIB=$(find mgba/build \
+              -type f \
+              -name "libmgba.a" \
+              | head -n 1)
+          fi
+
+          if [ -z "$LIB" ]; then
+            echo "ERROR: Could not find libmgba.a"
             exit 1
           fi
+
+          echo "Using mGBA library:"
+          echo "$LIB"
+
+          cp "$LIB" \
+            project/mgba/build-hoenn-3ds/libmgba-static.a
+
+          if [ -d mgba/build/include ]; then
+            cp -R mgba/build/include/. \
+              project/mgba/build-hoenn-3ds/include/
+          fi
+
+          echo "===== Prepared library ====="
+          ls -lh \
+            project/mgba/build-hoenn-3ds/libmgba-static.a
+
+      - name: Verify project files
+        run: |
+          echo "===== Hoenn Reborn project ====="
+
+          find project \
+            -maxdepth 3 \
+            -type f \
+            | sort
+
+          echo "===== mGBA library ====="
+
+          ls -lh \
+            project/mgba/build-hoenn-3ds/libmgba-static.a
 
       - name: Build Hoenn Reborn
         working-directory: project
@@ -102,8 +145,14 @@ jobs:
       - name: Check build outputs
         run: |
           echo "===== BUILD OUTPUTS ====="
-          find project -type f \
-            \( -name "*.cia" -o -name "*.3dsx" -o -name "*.elf" \) \
+
+          find project \
+            -type f \
+            \( \
+              -name "*.cia" \
+              -o -name "*.3dsx" \
+              -o -name "*.elf" \
+            \) \
             -print
 
       - name: Upload CIA
@@ -134,7 +183,8 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs
+          name: Hoenn-Reborn-build-logs
           path: |
             mgba/build/CMakeCache.txt
             mgba/build/CMakeFiles/**
+            project/mgba/build-hoenn-3ds/**
