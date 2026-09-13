@@ -1,0 +1,65 @@
+name: Build Hoenn Reborn
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    container:
+      image: devkitpro/devkitarm
+
+    steps:
+      - name: Get project
+        uses: actions/checkout@v4
+
+      - name: Extract project
+        run: |
+          mkdir project
+          unzip -q Hoenn_Reborn_GitHub_Build.zip -d project
+          cd project
+          ls -la
+
+      - name: Clone mGBA
+        run: |
+          git clone --depth 1 https://github.com/mgba-emu/mgba.git mgba
+
+      - name: Build mGBA
+        run: |
+          cd mgba
+          mkdir build
+          cd build
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=../src/platform/3ds/CMakeToolchain.txt \
+            -D3DS=ON \
+            -DLIBMGBA_ONLY=ON \
+            -DBUILD_STATIC=ON \
+            -DBUILD_SHARED=OFF
+          make -j2
+
+      - name: Build Hoenn Reborn
+        run: |
+          cd project
+          make -j2
+
+      - name: Show build files
+        if: always()
+        run: |
+          find project -type f \( -name "*.cia" -o -name "*.3dsx" -o -name "*.elf" \) -print
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hoenn-Reborn-Build
+          path: |
+            project/*.cia
+            project/*.3dsx
+            project/*.elf
+          if-no-files-found: warn
