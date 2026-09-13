@@ -72,9 +72,6 @@ jobs:
         run: |
           set -eux
 
-          echo "Repository contents:"
-          find . -maxdepth 3 -type f | sort | head -300
-
           mkdir -p /tmp/hoenn_extract
 
           ZIP_FILE=""
@@ -116,17 +113,16 @@ jobs:
 
           cp -a "$PROJECT_ROOT"/. project/
 
-          echo "Final project:"
-          find project -maxdepth 4 -type f | sort | head -300
-
           test -f project/Makefile
           test -f project/source/main.c
           test -f project/source/dashboard.c
           test -f project/source/game_data.c
           test -f project/source/gba_core_mgba.c
 
+          echo "PROJECT READY"
+
       # ============================================================
-      # 5. DOWNLOAD BANNERTOOL RELEASE
+      # 5. INSTALL BANNERTOOL
       # ============================================================
       - name: Install bannertool
         shell: bash
@@ -156,22 +152,26 @@ jobs:
             -type f \
             | sort
 
+          # IMPORTANT:
+          # Use the 64-bit Linux binary.
           BANNERTOOL_BIN=$(find bannertool_extract \
             -type f \
-            -name bannertool \
+            -path "*/linux-x86_64/bannertool" \
             | head -1)
 
           if [ -z "$BANNERTOOL_BIN" ]; then
-            echo "Could not find bannertool executable."
+            echo "64-bit bannertool was not found."
 
+            echo "Available bannertool binaries:"
             find bannertool_extract \
               -type f \
+              -name bannertool \
               | sort
 
             exit 1
           fi
 
-          echo "Found bannertool:"
+          echo "Using 64-bit bannertool:"
           echo "$BANNERTOOL_BIN"
 
           cp "$BANNERTOOL_BIN" \
@@ -189,9 +189,12 @@ jobs:
           echo "========================================"
 
           command -v bannertool
+
           bannertool --help
 
+          echo "========================================"
           echo "BANNERTOOL OK"
+          echo "========================================"
 
       # ============================================================
       # 6. INSTALL 3DS PACKAGING TOOLS
@@ -229,7 +232,6 @@ jobs:
 
           if [ -z "$MAKEROM_BIN" ]; then
             echo "makerom executable not found."
-            find makerom_extract -type f | sort
             exit 1
           fi
 
@@ -256,11 +258,6 @@ jobs:
             --zstd \
             -xf 3dstools.pkg.tar.zst \
             -C 3dstools_extract
-
-          echo "3dstools contents:"
-          find 3dstools_extract \
-            -type f \
-            | sort
 
           THREE_DS_XTOOL=$(find 3dstools_extract \
             -type f \
@@ -329,7 +326,7 @@ jobs:
           export PATH="/opt/hoenn-tools:$PATH"
 
           echo "========================================"
-          echo "VERIFYING ALL 3DS TOOLS"
+          echo "VERIFYING 3DS TOOLS"
           echo "========================================"
 
           command -v bannertool
@@ -367,7 +364,7 @@ jobs:
           echo "mGBA SOURCE OK"
 
       # ============================================================
-      # 8. BUILD mGBA
+      # 8. BUILD mGBA STATIC LIBRARY
       # ============================================================
       - name: Build mGBA static library
         shell: bash
@@ -404,10 +401,6 @@ jobs:
             --target mgba \
             -j2
 
-          echo "========================================"
-          echo "FINDING libmgba.a"
-          echo "========================================"
-
           MGBA_LIB=$(find mgba/build-hoenn-3ds \
             -type f \
             -name "libmgba.a" \
@@ -418,7 +411,7 @@ jobs:
             exit 1
           fi
 
-          echo "Found:"
+          echo "Found mGBA:"
           echo "$MGBA_LIB"
 
           mkdir -p project/mgba/build-hoenn-3ds
@@ -436,7 +429,9 @@ jobs:
             mgba/src/. \
             project/mgba/src/
 
+          echo "========================================"
           echo "mGBA STATIC LIBRARY READY"
+          echo "========================================"
 
           ls -lh \
             project/mgba/build-hoenn-3ds/libmgba-static.a
@@ -482,9 +477,7 @@ jobs:
           p.write_text(s)
           PY
 
-          echo "========================================"
           echo "MAKEFILE READY"
-          echo "========================================"
 
           test -f \
             mgba/build-hoenn-3ds/libmgba-static.a
