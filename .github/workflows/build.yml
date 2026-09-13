@@ -49,29 +49,122 @@ jobs:
           command -v cmake
           command -v git
           command -v python3
+          command -v unzip
 
 
       # ============================================================
-      # PROJECT
+      # EXTRACT HOENN REBORN PROJECT
+      # ============================================================
+
+      - name: Extract Hoenn Reborn project
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "REPOSITORY CONTENTS"
+          echo "=========================================="
+
+          ls -la
+
+          echo ""
+          echo "=========================================="
+          echo "SEARCHING FOR PROJECT ZIP"
+          echo "=========================================="
+
+          ZIP_FILE=$(find . -maxdepth 2 -type f -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: No ZIP project file was found."
+            exit 1
+          fi
+
+          echo "Found project archive:"
+          echo "$ZIP_FILE"
+
+          echo ""
+          echo "=========================================="
+          echo "EXTRACTING PROJECT"
+          echo "=========================================="
+
+          rm -rf /tmp/hoenn_extract
+          mkdir -p /tmp/hoenn_extract
+
+          unzip -o "$ZIP_FILE" -d /tmp/hoenn_extract
+
+          echo ""
+          echo "Extracted files:"
+          find /tmp/hoenn_extract -maxdepth 3 -type f | head -100
+
+          echo ""
+          echo "=========================================="
+          echo "LOCATING MAKEFILE"
+          echo "=========================================="
+
+          MAKEFILE=$(find /tmp/hoenn_extract \
+            -type f \
+            -name "Makefile" \
+            | head -n 1)
+
+          if [ -z "$MAKEFILE" ]; then
+            echo "ERROR: Makefile was not found inside the ZIP."
+            exit 1
+          fi
+
+          echo "Found Makefile:"
+          echo "$MAKEFILE"
+
+          PROJECT_DIR=$(dirname "$MAKEFILE")
+
+          echo ""
+          echo "Project directory:"
+          echo "$PROJECT_DIR"
+
+          echo ""
+          echo "=========================================="
+          echo "INSTALLING PROJECT"
+          echo "=========================================="
+
+          rm -rf project
+
+          mkdir -p project
+
+          cp -R "$PROJECT_DIR"/. project/
+
+          echo ""
+          echo "Project installed."
+
+          ls -la project
+
+
+      # ============================================================
+      # VERIFY PROJECT
       # ============================================================
 
       - name: Verify Hoenn Reborn project
         run: |
-          echo "Repository contents:"
-          ls -la
+          set -e
+
+          echo "=========================================="
+          echo "VERIFYING PROJECT"
+          echo "=========================================="
 
           test -d project
           test -f project/Makefile
           test -f project/source/main.c
+          test -f project/source/dashboard.c
+          test -f project/source/game_data.c
+          test -f project/source/gba_core_mgba.c
 
-          echo "Project found successfully."
+          echo ""
+          echo "Project structure:"
+          find project -maxdepth 2 -type f | sort
+
+          echo ""
+          echo "Hoenn Reborn project verified successfully."
 
 
       # ============================================================
       # INSTALL 3DS PACKAGING TOOLS
-      #
-      # We use fixed Linux downloads instead of trying to guess
-      # GitHub release asset names.
       # ============================================================
 
       - name: Install 3DS packaging tools
@@ -86,7 +179,7 @@ jobs:
           cd /tmp/3ds-tools
 
           echo "=========================================="
-          echo "Downloading bannertool"
+          echo "DOWNLOADING BANNERTool"
           echo "=========================================="
 
           wget -O bannertool.zip \
@@ -94,16 +187,20 @@ jobs:
 
           unzip -o bannertool.zip
 
-          test -f linux-x86_64/bannertool
+          BANNER=$(find . -type f -name "bannertool" | head -n 1)
 
-          cp linux-x86_64/bannertool \
-            "$DEVKITPRO/tools/bin/bannertool"
+          if [ -z "$BANNER" ]; then
+            echo "ERROR: bannertool was not found."
+            find . -type f
+            exit 1
+          fi
 
+          cp "$BANNER" "$DEVKITPRO/tools/bin/bannertool"
           chmod +x "$DEVKITPRO/tools/bin/bannertool"
 
 
           echo "=========================================="
-          echo "Downloading makerom"
+          echo "DOWNLOADING MAKEROM"
           echo "=========================================="
 
           wget -O makerom.zip \
@@ -111,16 +208,20 @@ jobs:
 
           unzip -o makerom.zip
 
-          test -f makerom
+          MAKEROM=$(find . -type f -name "makerom" | head -n 1)
 
-          cp makerom \
-            "$DEVKITPRO/tools/bin/makerom"
+          if [ -z "$MAKEROM" ]; then
+            echo "ERROR: makerom was not found."
+            find . -type f
+            exit 1
+          fi
 
+          cp "$MAKEROM" "$DEVKITPRO/tools/bin/makerom"
           chmod +x "$DEVKITPRO/tools/bin/makerom"
 
 
           echo "=========================================="
-          echo "Downloading 3dstools"
+          echo "DOWNLOADING 3DSTOOLS"
           echo "=========================================="
 
           wget -O 3dstools.pkg.tar.zst \
@@ -132,13 +233,10 @@ jobs:
             -xf 3dstools.pkg.tar.zst \
             -C /tmp/3dstools-package
 
-          echo "3dstools package contents:"
-          find /tmp/3dstools-package -type f -maxdepth 8 -print
+          echo ""
+          echo "3dstools package:"
+          find /tmp/3dstools-package -type f | head -100
 
-
-          echo "=========================================="
-          echo "Installing 3dstools binaries"
-          echo "=========================================="
 
           FOUND_3DSXTOOL=$(find /tmp/3dstools-package \
             -type f \
@@ -172,7 +270,7 @@ jobs:
 
 
           echo "=========================================="
-          echo "Downloading tex3ds"
+          echo "DOWNLOADING TEX3DS"
           echo "=========================================="
 
           wget -O tex3ds.pkg.tar.zst \
@@ -183,10 +281,6 @@ jobs:
           tar --zstd \
             -xf tex3ds.pkg.tar.zst \
             -C /tmp/tex3ds-package
-
-          echo "tex3ds package contents:"
-          find /tmp/tex3ds-package -type f -maxdepth 8 -print
-
 
           FOUND_TEX3DS=$(find /tmp/tex3ds-package \
             -type f \
@@ -204,8 +298,9 @@ jobs:
           chmod +x "$DEVKITPRO/tools/bin/tex3ds"
 
 
+          echo ""
           echo "=========================================="
-          echo "3DS TOOL INSTALLATION COMPLETE"
+          echo "3DS TOOLS INSTALLED"
           echo "=========================================="
 
           export PATH="$DEVKITPRO/tools/bin:$DEVKITARM/bin:$PATH"
@@ -217,20 +312,7 @@ jobs:
           command -v tex3ds
 
           echo ""
-          echo "bannertool:"
-          bannertool --help >/dev/null || true
-
-          echo ""
-          echo "makerom:"
-          makerom --version || true
-
-          echo ""
-          echo "3dsxtool:"
-          3dsxtool --help >/dev/null || true
-
-          echo ""
-          echo "tex3ds:"
-          tex3ds --version || true
+          echo "All required 3DS tools are available."
 
 
       # ============================================================
@@ -362,11 +444,6 @@ jobs:
 
           echo "mGBA headers copied."
 
-          find project/mgba/include \
-            -maxdepth 3 \
-            -type f \
-            | head -50
-
 
       # ============================================================
       # VERIFY mGBA STAGING
@@ -379,16 +456,11 @@ jobs:
           test -s project/mgba/build-hoenn-3ds/libmgba-static.a
 
           echo "mGBA library:"
-          ls -lh \
-            project/mgba/build-hoenn-3ds/libmgba-static.a
-
-          echo ""
-          echo "mGBA include directory:"
-          ls -la project/mgba/include || true
+          ls -lh project/mgba/build-hoenn-3ds/libmgba-static.a
 
 
       # ============================================================
-      # DISABLE PROJECT'S OLD mGBA BUILD RULE
+      # DISABLE OLD mGBA BUILD RULE
       # ============================================================
 
       - name: Disable bundled mGBA build rule
@@ -421,18 +493,13 @@ jobs:
               p.write_text(text)
               print("Old mGBA build rule replaced.")
           else:
-              print("Old mGBA build rule was not found.")
-              print("Checking current Makefile...")
+              print("Old mGBA rule not found; leaving Makefile unchanged.")
 
           PY
 
-          echo ""
-          echo "Current mgba-core rule:"
-          grep -A5 -B2 "^mgba-core:" Makefile || true
-
 
       # ============================================================
-      # VERIFY PROJECT mGBA LIBRARY
+      # VERIFY PROJECT mGBA
       # ============================================================
 
       - name: Verify Hoenn Reborn mGBA library
@@ -442,7 +509,8 @@ jobs:
 
           test -s mgba/build-hoenn-3ds/libmgba-static.a
 
-          echo "Hoenn Reborn mGBA library verified:"
+          echo "Hoenn Reborn mGBA library verified."
+
           ls -lh mgba/build-hoenn-3ds/libmgba-static.a
 
 
@@ -458,7 +526,7 @@ jobs:
           export PATH="$DEVKITPRO/tools/bin:$DEVKITARM/bin:$PATH"
 
           echo "=========================================="
-          echo "VERIFYING BUILD TOOLS"
+          echo "BUILD TOOLS"
           echo "=========================================="
 
           command -v arm-none-eabi-gcc
@@ -476,12 +544,10 @@ jobs:
 
           echo ""
           echo "=========================================="
-          echo "VERIFY mGBA AFTER CLEAN"
+          echo "VERIFY mGBA"
           echo "=========================================="
 
           test -s mgba/build-hoenn-3ds/libmgba-static.a
-
-          ls -lh mgba/build-hoenn-3ds/libmgba-static.a
 
           echo ""
           echo "=========================================="
@@ -528,7 +594,7 @@ jobs:
 
           test -s Hoenn_Reborn.cia
 
-          echo "CIA successfully created."
+          echo "CIA successfully created!"
 
           ls -lh Hoenn_Reborn.cia
 
