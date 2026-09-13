@@ -37,6 +37,34 @@ jobs:
           command -v 3dsxtool || true
           command -v tex3ds || true
 
+      - name: Verify devkitPro environment
+        run: |
+          echo "===== ENVIRONMENT ====="
+
+          echo "DEVKITPRO=$DEVKITPRO"
+          echo "DEVKITARM=$DEVKITARM"
+
+          echo "===== GCC ====="
+
+          command -v arm-none-eabi-gcc
+          arm-none-eabi-gcc --version
+
+          echo "===== G++ ====="
+
+          command -v arm-none-eabi-g++
+          arm-none-eabi-g++ --version
+
+          echo "===== AR ====="
+
+          command -v arm-none-eabi-ar
+
+          echo "===== 3DS TOOLS ====="
+
+          command -v makerom || true
+          command -v bannertool || true
+          command -v 3dsxtool || true
+          command -v tex3ds || true
+
       - name: Extract Hoenn Reborn project
         run: |
           rm -rf project
@@ -44,8 +72,12 @@ jobs:
 
           unzip -o Hoenn_Reborn_GitHub_Build.zip -d project
 
-          echo "===== PROJECT ====="
-          find project -maxdepth 3 -type f | sort
+          echo "===== PROJECT CONTENTS ====="
+
+          find project \
+            -maxdepth 3 \
+            -type f \
+            | sort
 
       - name: Download mGBA 0.10.5
         run: |
@@ -57,13 +89,18 @@ jobs:
             https://github.com/mgba-emu/mgba.git \
             mgba
 
-          test -f mgba/src/platform/3ds/CMakeToolchain.txt
+          echo "===== mGBA 3DS TOOLCHAIN ====="
 
-          echo "mGBA 0.10.5 downloaded successfully."
+          test -f \
+            mgba/src/platform/3ds/CMakeToolchain.txt
+
+          ls -lh \
+            mgba/src/platform/3ds/CMakeToolchain.txt
 
       - name: Configure mGBA
         run: |
           rm -rf mgba/build
+
           mkdir -p mgba/build
 
           cd mgba/build
@@ -86,6 +123,10 @@ jobs:
             -DBUILD_EXAMPLE=OFF \
             -DBUILD_PERF=OFF \
             ..
+
+          echo "===== CMAKE CONFIGURATION COMPLETE ====="
+
+          test -f Makefile
 
       - name: Build mGBA
         run: |
@@ -136,11 +177,15 @@ jobs:
           mkdir -p project/mgba/include
           mkdir -p project/mgba/build-hoenn-3ds/include
 
+          echo "===== COPYING PUBLIC HEADERS ====="
+
           if [ -d mgba/include ]; then
             cp -R \
               mgba/include/. \
               project/mgba/include/
           fi
+
+          echo "===== COPYING GENERATED HEADERS ====="
 
           if [ -d mgba/build/include ]; then
             cp -R \
@@ -167,12 +212,16 @@ jobs:
             project/mgba/include
 
           echo "Library:"
+
           ls -lh \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
-          echo "Library file type:"
-          file \
+          echo "Library size:"
+
+          wc -c \
             project/mgba/build-hoenn-3ds/libmgba-static.a
+
+          echo "mGBA staging verified successfully."
 
       - name: Disable broken bundled mGBA build rule
         working-directory: project
@@ -233,9 +282,6 @@ jobs:
 
           make clean || true
 
-          # make clean does not remove the staged mGBA library,
-          # but verify it again before compilation.
-
           test -s \
             mgba/build-hoenn-3ds/libmgba-static.a
 
@@ -251,8 +297,10 @@ jobs:
             -type f \
             \( \
               -name "*.cia" \
-              -o -name "*.3dsx" \
-              -o -name "*.elf" \
+              -o \
+              -name "*.3dsx" \
+              -o \
+              -name "*.elf" \
             \) \
             -print
 
