@@ -17,13 +17,13 @@ jobs:
     steps:
 
       # ============================================================
-      # 1. CHECKOUT
+      # CHECKOUT
       # ============================================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # ============================================================
-      # 2. DEVKITPRO
+      # DEVKITPRO ENVIRONMENT
       # ============================================================
       - name: Initialize devkitPro environment
         shell: bash
@@ -43,7 +43,7 @@ jobs:
           cmake --version
 
       # ============================================================
-      # 3. DEPENDENCIES
+      # DEPENDENCIES
       # ============================================================
       - name: Install build dependencies
         shell: bash
@@ -65,7 +65,7 @@ jobs:
             libfreetype6-dev
 
       # ============================================================
-      # 4. LOCATE PROJECT
+      # LOCATE PROJECT ZIP
       # ============================================================
       - name: Locate Hoenn Reborn project
         shell: bash
@@ -124,7 +124,7 @@ jobs:
           echo "========================================"
 
       # ============================================================
-      # 5. BANNERTOOL
+      # BANNERTOOL
       # ============================================================
       - name: Install bannertool
         shell: bash
@@ -170,9 +170,6 @@ jobs:
             exit 1
           fi
 
-          echo "Using:"
-          echo "$BANNERTOOL_BIN"
-
           cp "$BANNERTOOL_BIN" \
             /opt/hoenn-tools/bannertool
 
@@ -183,21 +180,16 @@ jobs:
 
           export PATH="/opt/hoenn-tools:$PATH"
 
-          echo "========================================"
-          echo "VERIFYING BANNERTOOL"
-          echo "========================================"
-
           command -v bannertool
-          test -x /opt/hoenn-tools/bannertool
 
-          ls -lh /opt/hoenn-tools/bannertool
+          test -x /opt/hoenn-tools/bannertool
 
           echo "========================================"
           echo "BANNERTOOL OK"
           echo "========================================"
 
       # ============================================================
-      # 6. 3DS PACKAGING TOOLS
+      # 3DS PACKAGING TOOLS
       # ============================================================
       - name: Install 3DS packaging tools
         shell: bash
@@ -211,6 +203,7 @@ jobs:
           # --------------------------------------------------------
           # MAKEROM
           # --------------------------------------------------------
+
           echo "========================================"
           echo "INSTALLING MAKEROM"
           echo "========================================"
@@ -242,11 +235,10 @@ jobs:
           chmod +x \
             /opt/hoenn-tools/makerom
 
-          echo "makerom installed."
-
           # --------------------------------------------------------
           # 3DSTOOLS
           # --------------------------------------------------------
+
           echo "========================================"
           echo "INSTALLING 3DSTOOLS"
           echo "========================================"
@@ -261,11 +253,6 @@ jobs:
             --zstd \
             -xf 3dstools.pkg.tar.zst \
             -C 3dstools_extract
-
-          echo "3dstools files:"
-          find 3dstools_extract \
-            -type f \
-            | sort
 
           THREE_DS_XTOOL=$(find 3dstools_extract \
             -type f \
@@ -300,6 +287,7 @@ jobs:
           # --------------------------------------------------------
           # TEX3DS
           # --------------------------------------------------------
+
           echo "========================================"
           echo "INSTALLING TEX3DS"
           echo "========================================"
@@ -343,18 +331,12 @@ jobs:
           command -v smdhtool
           command -v tex3ds
 
-          test -x /opt/hoenn-tools/bannertool
-          test -x /opt/hoenn-tools/makerom
-          test -x /opt/hoenn-tools/3dsxtool
-          test -x /opt/hoenn-tools/smdhtool
-          test -x /opt/hoenn-tools/tex3ds
-
           echo "========================================"
           echo "3DS TOOLS READY"
           echo "========================================"
 
       # ============================================================
-      # 7. GET mGBA
+      # GET mGBA
       # ============================================================
       - name: Get mGBA source
         shell: bash
@@ -378,7 +360,7 @@ jobs:
           echo "mGBA SOURCE OK"
 
       # ============================================================
-      # 8. BUILD mGBA
+      # BUILD mGBA
       # ============================================================
       - name: Build mGBA static library
         shell: bash
@@ -425,7 +407,7 @@ jobs:
             exit 1
           fi
 
-          echo "Found:"
+          echo "Found mGBA library:"
           echo "$MGBA_LIB"
 
           mkdir -p project/mgba/build-hoenn-3ds
@@ -451,7 +433,7 @@ jobs:
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
       # ============================================================
-      # 9. PREPARE MAKEFILE
+      # FIX MAKEFILE
       # ============================================================
       - name: Prepare Hoenn Reborn Makefile
         shell: bash
@@ -466,12 +448,51 @@ jobs:
           p = Path("Makefile")
           s = p.read_text()
 
+          # --------------------------------------------------------
+          # FIX 1:
+          #
+          # The mGBA library is inside project/mgba,
+          # so the Makefile must use ./mgba rather than ../mgba.
+          # --------------------------------------------------------
+
+          s = s.replace(
+              "MGBA_DIR ?= ../mgba",
+              "MGBA_DIR ?= ./mgba"
+          )
+
+          # --------------------------------------------------------
+          # FIX 2:
+          #
+          # tex3ds uses:
+          #
+          #     tex3ds <input> -o <output>
+          #
+          # NOT:
+          #
+          #     tex3ds -i <input> -o <output>
+          #
+          # because -i means an include/options file.
+          # --------------------------------------------------------
+
+          s = s.replace(
+              "tex3ds -i $< -o $@",
+              "tex3ds \"$<\" -o \"$@\""
+          )
+
+          # --------------------------------------------------------
+          # FIX 3:
+          #
+          # Replace the mgba-core recipe with a prebuilt-library
+          # check.
+          #
+          # chr(9) creates an actual Make TAB.
+          # --------------------------------------------------------
+
           start = s.find("mgba-core:")
 
           if start == -1:
               raise SystemExit("Could not find mgba-core target")
 
-          # Find the next Make target.
           rest = s[start + len("mgba-core:"):]
 
           next_target = None
@@ -483,17 +504,18 @@ jobs:
               "\nclean:"
           ]:
               pos = rest.find(marker)
+
               if pos != -1:
                   if next_target is None or pos < next_target:
                       next_target = pos
 
           if next_target is None:
-              raise SystemExit("Could not find next Makefile target")
+              raise SystemExit(
+                  "Could not find next Makefile target"
+              )
 
           end = start + len("mgba-core:") + next_target
 
-          # IMPORTANT:
-          # chr(9) creates a REAL TAB character.
           TAB = chr(9)
 
           replacement = (
@@ -507,25 +529,42 @@ jobs:
 
           p.write_text(s)
 
-          print("Makefile patched successfully.")
-          print("Using real TAB characters for Make recipes.")
+          print("========================================")
+          print("MAKEFILE PATCHED")
+          print("========================================")
+          print("MGBA_DIR = ./mgba")
+          print("tex3ds input syntax fixed")
+          print("mgba-core uses real TAB characters")
           PY
 
           echo "========================================"
-          echo "MAKEFILE READY"
+          echo "CHECKING MAKEFILE"
+          echo "========================================"
+
+          grep -n \
+            -E \
+            "MGBA_DIR|MGBA_BUILD|MGBA_LIB|tex3ds|mgba-core" \
+            Makefile
+
+          echo "========================================"
+          echo "TESTING mGBA PATH"
           echo "========================================"
 
           test -f \
             mgba/build-hoenn-3ds/libmgba-static.a
 
-          echo "Checking Makefile syntax..."
+          echo "mGBA library found."
+
+          echo "========================================"
+          echo "TESTING MAKEFILE SYNTAX"
+          echo "========================================"
 
           make -n mgba-core
 
-          echo "Makefile syntax OK."
+          echo "Makefile test passed."
 
       # ============================================================
-      # 10. BUILD HOENN REBORN
+      # BUILD HOENN REBORN
       # ============================================================
       - name: Build Hoenn Reborn
         shell: bash
@@ -554,7 +593,7 @@ jobs:
             Hoenn_Reborn.bnr
 
       # ============================================================
-      # 11. VERIFY CIA
+      # VERIFY CIA
       # ============================================================
       - name: Verify CIA
         shell: bash
@@ -566,11 +605,14 @@ jobs:
           test -f Hoenn_Reborn.cia
           test -s Hoenn_Reborn.cia
 
-          echo "CIA SIZE:"
+          echo "========================================"
+          echo "CIA CREATED"
+          echo "========================================"
+
           wc -c Hoenn_Reborn.cia
 
       # ============================================================
-      # 12. VERIFY 3DSX
+      # VERIFY 3DSX
       # ============================================================
       - name: Verify 3DSX
         shell: bash
@@ -582,11 +624,14 @@ jobs:
           test -f Hoenn_Reborn.3dsx
           test -s Hoenn_Reborn.3dsx
 
-          echo "3DSX SIZE:"
+          echo "========================================"
+          echo "3DSX CREATED"
+          echo "========================================"
+
           wc -c Hoenn_Reborn.3dsx
 
       # ============================================================
-      # 13. UPLOAD CIA
+      # UPLOAD CIA
       # ============================================================
       - name: Upload CIA
         if: success()
@@ -597,7 +642,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # 14. UPLOAD 3DSX
+      # UPLOAD 3DSX
       # ============================================================
       - name: Upload 3DSX
         if: success()
@@ -608,7 +653,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # 15. UPLOAD ELF
+      # UPLOAD ELF
       # ============================================================
       - name: Upload ELF
         if: success()
@@ -619,7 +664,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # 16. BUILD LOGS
+      # BUILD LOGS
       # ============================================================
       - name: Upload build logs
         if: always()
