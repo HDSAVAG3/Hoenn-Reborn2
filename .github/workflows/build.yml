@@ -438,19 +438,59 @@ jobs:
           LIBCTRU_ROOT="/tmp/3ds-libraries/libctru-2.7.0"
 
           echo "========================================"
-          echo "LIBCTRU SOURCE"
+          echo "LOCATING GDBHIO.C"
           echo "========================================"
 
-          find "$LIBCTRU_ROOT" \
+          GDBHIO_FILE="$(find \
+            "$LIBCTRU_ROOT" \
             -type f \
             -name gdbhio.c \
-            -print
+            | head -n 1)"
+
+          if [ -z "$GDBHIO_FILE" ]; then
+            echo "ERROR: gdbhio.c not found."
+            exit 1
+          fi
+
+          echo "Found:"
+          echo "$GDBHIO_FILE"
 
           # ========================================================
-          # BUILD LIBCTRU
+          # FIX CURRENT DEVKITARM WARNING
           #
-          # This specifically disables the warning that the current
-          # libctru source triggers with the current devkitARM.
+          # Do NOT replace CFLAGS.
+          #
+          # Replacing CFLAGS removes libctru's normal include
+          # directories and causes:
+          #
+          # fatal error: 3ds/types.h: No such file or directory
+          #
+          # Instead, make the variable explicitly used.
+          # ========================================================
+
+          python3 - "$GDBHIO_FILE" <<'PY'
+          import sys
+          from pathlib import Path
+
+          p = Path(sys.argv[1])
+          s = p.read_text()
+
+          old = "gdbhio_mode_t gdbMode = 0;"
+
+          if old in s:
+              s = s.replace(
+                  old,
+                  "gdbhio_mode_t gdbMode = 0; (void)gdbMode;",
+                  1
+              )
+              p.write_text(s)
+              print("Patched gdbMode warning.")
+          else:
+              print("gdbMode declaration already patched or formatting differs.")
+          PY
+
+          # ========================================================
+          # FIND MAKEFILE
           # ========================================================
 
           LIBCTRU_MAKEFILE="$(find \
@@ -466,26 +506,23 @@ jobs:
 
           LIBCTRU_DIR="$(dirname "$LIBCTRU_MAKEFILE")"
 
-          echo "libctru directory:"
-          echo "$LIBCTRU_DIR"
-
           echo "========================================"
           echo "BUILDING LIBCTRU"
           echo "========================================"
 
-          make \
-            -C "$LIBCTRU_DIR" \
-            CFLAGS="-Wno-unused-but-set-variable" \
-            CXXFLAGS="-Wno-unused-but-set-variable" \
-            -j2
+          cd "$LIBCTRU_DIR"
 
-          make \
-            -C "$LIBCTRU_DIR" \
-            install
+          # IMPORTANT:
+          # No CFLAGS override here.
+          make -j2
+
+          make install
 
           # ========================================================
           # CITRO3D
           # ========================================================
+
+          cd /tmp/3ds-libraries
 
           wget -O citro3d.tar.gz \
             https://github.com/devkitPro/citro3d/archive/refs/tags/v1.7.1.tar.gz
@@ -523,6 +560,8 @@ jobs:
           # ========================================================
           # CITRO2D
           # ========================================================
+
+          cd /tmp/3ds-libraries
 
           wget -O citro2d.tar.gz \
             https://github.com/devkitPro/citro2d/archive/refs/tags/v1.7.0.tar.gz
@@ -603,20 +642,19 @@ jobs:
 
           s = p.read_text()
 
-          # mGBA is staged inside project/mgba.
+          # mGBA lives inside project/mgba.
           s = s.replace(
               "MGBA_DIR ?= ../mgba",
               "MGBA_DIR ?= ./mgba"
           )
 
-          # tex3ds takes the PNG as the positional input.
+          # tex3ds takes the PNG as a positional argument.
           s = s.replace(
               "tex3ds -i $< -o $@",
               'tex3ds "$<" -o "$@"'
           )
 
-          # Prevent Make from trying to rebuild the already-staged
-          # mGBA library.
+          # Don't rebuild staged mGBA.
           if "mgba-core:" in s and "\n3dsx:" in s:
               start = s.index("mgba-core:")
               end = s.index("\n3dsx:", start)
@@ -653,7 +691,7 @@ jobs:
             || true
 
           echo "========================================"
-          echo "TEX3DS COMMAND"
+          echo "TEX3DS"
           echo "========================================"
 
           grep -n \
@@ -662,7 +700,7 @@ jobs:
             || true
 
           echo "========================================"
-          echo "LINKER LIBRARIES"
+          echo "LIBS"
           echo "========================================"
 
           grep -n \
