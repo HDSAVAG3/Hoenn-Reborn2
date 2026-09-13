@@ -17,7 +17,7 @@ jobs:
     steps:
 
       # ============================================================
-      # 1. CHECK OUT REPOSITORY
+      # 1. CHECKOUT
       # ============================================================
 
       - name: Checkout repository
@@ -25,7 +25,7 @@ jobs:
 
 
       # ============================================================
-      # 2. INSTALL BASIC LINUX TOOLS
+      # 2. BASIC LINUX TOOLS
       # ============================================================
 
       - name: Install build utilities
@@ -47,10 +47,10 @@ jobs:
 
 
       # ============================================================
-      # 3. SET DEVKITPRO PATHS
+      # 3. DEVKITPRO ENVIRONMENT
       # ============================================================
 
-      - name: Configure devkitPro environment
+      - name: Configure devkitPro
         shell: bash
         run: |
           set -eux
@@ -67,17 +67,13 @@ jobs:
 
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
 
-          echo "DEVKITPRO=$DEVKITPRO"
-          echo "DEVKITARM=$DEVKITARM"
-          echo "PATH=$PATH"
-
           arm-none-eabi-gcc --version
           make --version
           cmake --version
 
 
       # ============================================================
-      # 4. EXTRACT HOENN REBORN PROJECT
+      # 4. EXTRACT PROJECT
       # ============================================================
 
       - name: Extract Hoenn Reborn project
@@ -85,31 +81,23 @@ jobs:
         run: |
           set -eux
 
-          echo "========================================"
-          echo "FINDING PROJECT ZIP"
-          echo "========================================"
-
           ZIP_FILE="$(find "$GITHUB_WORKSPACE" \
             -type f \
             -name '*.zip' \
             | head -n 1)"
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: No project ZIP was found."
+            echo "ERROR: Project ZIP not found."
             exit 1
           fi
 
-          echo "Using project ZIP:"
+          echo "Project ZIP:"
           echo "$ZIP_FILE"
 
           rm -rf /tmp/hoenn_extract
           mkdir -p /tmp/hoenn_extract
 
           unzip -q "$ZIP_FILE" -d /tmp/hoenn_extract
-
-          echo "========================================"
-          echo "LOCATING MAKEFILE"
-          echo "========================================"
 
           MAKEFILE_PATH="$(find /tmp/hoenn_extract \
             -type f \
@@ -118,7 +106,7 @@ jobs:
 
           if [ -z "$MAKEFILE_PATH" ]; then
             echo "ERROR: Makefile not found."
-            find /tmp/hoenn_extract -maxdepth 3 -type f | head -100
+            find /tmp/hoenn_extract -maxdepth 4 -type f | head -200
             exit 1
           fi
 
@@ -132,15 +120,11 @@ jobs:
 
           cp -a "$PROJECT_SOURCE"/. project/
 
-          echo "========================================"
-          echo "PROJECT CONTENTS"
-          echo "========================================"
-
-          find project -maxdepth 3 -type f | sort | head -200
+          echo "Project extracted."
 
 
       # ============================================================
-      # 5. DOWNLOAD BANNERTOOL
+      # 5. BANNERTOOL
       # ============================================================
 
       - name: Install bannertool
@@ -165,26 +149,21 @@ jobs:
 
           if [ -z "$BANNER_BIN" ]; then
             echo "ERROR: x86_64 bannertool not found."
-
-            find /tmp/bannertool_extract -type f -maxdepth 5
-
+            find /tmp/bannertool_extract -type f
             exit 1
           fi
 
-          cp "$BANNER_BIN" /opt/hoenn-tools-bannertool
+          cp "$BANNER_BIN" /usr/local/bin/bannertool
 
-          chmod +x /opt/hoenn-tools-bannertool
+          chmod +x /usr/local/bin/bannertool
 
-          echo "/opt" >> "$GITHUB_PATH"
+          test -x /usr/local/bin/bannertool
 
-          test -x /opt/hoenn-tools-bannertool
-
-          echo "bannertool installed:"
-          ls -lh /opt/hoenn-tools-bannertool
+          echo "bannertool installed."
 
 
       # ============================================================
-      # 6. INSTALL MAKEROM
+      # 6. MAKEROM
       # ============================================================
 
       - name: Install makerom
@@ -192,37 +171,38 @@ jobs:
         run: |
           set -eux
 
-          mkdir -p /opt/makerom
+          rm -rf /tmp/makerom
+          mkdir -p /tmp/makerom
 
           wget -O /tmp/makerom.zip \
             https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip
 
           unzip -q \
             /tmp/makerom.zip \
-            -d /opt/makerom
+            -d /tmp/makerom
 
-          MAKEROM_BIN="$(find /opt/makerom \
+          MAKEROM_BIN="$(find /tmp/makerom \
             -type f \
-            -name 'makerom' \
+            -name makerom \
             | head -n 1)"
 
           if [ -z "$MAKEROM_BIN" ]; then
             echo "ERROR: makerom not found."
-            find /opt/makerom -type f
+            find /tmp/makerom -type f
             exit 1
           fi
 
           chmod +x "$MAKEROM_BIN"
 
-          ln -sf "$MAKEROM_BIN" /usr/local/bin/makerom
+          cp "$MAKEROM_BIN" /usr/local/bin/makerom
+
+          chmod +x /usr/local/bin/makerom
 
           command -v makerom
 
-          ls -lh "$MAKEROM_BIN"
-
 
       # ============================================================
-      # 7. INSTALL 3DS TOOLS
+      # 7. 3DS TOOLS
       # ============================================================
 
       - name: Install 3DS tools
@@ -230,6 +210,7 @@ jobs:
         run: |
           set -eux
 
+          rm -rf /tmp/3dstools
           mkdir -p /tmp/3dstools
 
           wget -O /tmp/3dstools.pkg.tar.zst \
@@ -240,22 +221,21 @@ jobs:
             -xf /tmp/3dstools.pkg.tar.zst \
             -C /tmp/3dstools
 
-          cp -a /tmp/3dstools/opt/devkitpro/. \
+          cp -a \
+            /tmp/3dstools/opt/devkitpro/. \
             /opt/devkitpro/
 
           find /opt/devkitpro \
             -type f \
-            \( -name '3dsxtool' -o -name '3dslink' \) \
+            -name 3dsxtool \
             -exec chmod +x {} \; \
             || true
 
           echo "/opt/devkitpro/tools/bin" >> "$GITHUB_PATH"
 
-          echo "3DS tools installed."
-
 
       # ============================================================
-      # 8. INSTALL TEX3DS
+      # 8. TEX3DS
       # ============================================================
 
       - name: Install tex3ds
@@ -263,6 +243,7 @@ jobs:
         run: |
           set -eux
 
+          rm -rf /tmp/tex3ds
           mkdir -p /tmp/tex3ds
 
           wget -O /tmp/tex3ds.pkg.tar.zst \
@@ -273,55 +254,46 @@ jobs:
             -xf /tmp/tex3ds.pkg.tar.zst \
             -C /tmp/tex3ds
 
-          cp -a /tmp/tex3ds/opt/devkitpro/. \
+          cp -a \
+            /tmp/tex3ds/opt/devkitpro/. \
             /opt/devkitpro/
 
           find /opt/devkitpro \
             -type f \
-            -name 'tex3ds' \
+            -name tex3ds \
             -exec chmod +x {} \; \
             || true
 
           echo "/opt/devkitpro/tools/bin" >> "$GITHUB_PATH"
 
-          echo "tex3ds installed."
-
 
       # ============================================================
-      # 9. VERIFY PACKAGING TOOLS
+      # 9. VERIFY TOOLS
       # ============================================================
 
-      - name: Verify 3DS tools
+      - name: Verify tools
         shell: bash
         run: |
           set -eux
 
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
 
-          echo "========================================"
-          echo "VERIFYING TOOLS"
-          echo "========================================"
-
-          command -v bannertool || true
+          command -v bannertool
           command -v makerom
           command -v tex3ds
 
           find /opt/devkitpro \
             -type f \
-            -name '3dsxtool' \
+            -name 3dsxtool \
             -print \
             | head -20
-
-          test -x /opt/hoenn-tools-bannertool
-
-          echo "All packaging tools located."
 
 
       # ============================================================
       # 10. DOWNLOAD MGBA
       # ============================================================
 
-      - name: Download mGBA 0.10.5
+      - name: Download mGBA
         shell: bash
         run: |
           set -eux
@@ -341,11 +313,9 @@ jobs:
 
           test -f "$GITHUB_WORKSPACE/mgba/CMakeLists.txt"
 
-          echo "mGBA source ready."
-
 
       # ============================================================
-      # 11. BUILD MGBA STATIC LIBRARY
+      # 11. BUILD MGBA
       # ============================================================
 
       - name: Build mGBA
@@ -355,6 +325,7 @@ jobs:
 
           export DEVKITPRO=/opt/devkitpro
           export DEVKITARM=/opt/devkitpro/devkitARM
+
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
 
           rm -rf \
@@ -381,32 +352,25 @@ jobs:
           MGBA_LIB_SRC="$(find \
             "$GITHUB_WORKSPACE/mgba/build-hoenn-3ds" \
             -type f \
-            -name 'libmgba.a' \
+            -name libmgba.a \
             | head -n 1)"
 
           if [ -z "$MGBA_LIB_SRC" ]; then
-            echo "ERROR: libmgba.a was not created."
-            find "$GITHUB_WORKSPACE/mgba/build-hoenn-3ds" \
-              -type f \
-              | head -200
+            echo "ERROR: libmgba.a not found."
             exit 1
           fi
 
-          echo "mGBA library:"
           ls -lh "$MGBA_LIB_SRC"
 
 
       # ============================================================
-      # 12. STAGE MGBA INSIDE PROJECT
+      # 12. STAGE MGBA
       # ============================================================
 
-      - name: Stage mGBA for Hoenn Reborn
+      - name: Stage mGBA
         shell: bash
         run: |
           set -eux
-
-          export DEVKITPRO=/opt/devkitpro
-          export DEVKITARM=/opt/devkitpro/devkitARM
 
           rm -rf project/mgba
 
@@ -417,7 +381,7 @@ jobs:
           MGBA_LIB_SRC="$(find \
             "$GITHUB_WORKSPACE/mgba/build-hoenn-3ds" \
             -type f \
-            -name 'libmgba.a' \
+            -name libmgba.a \
             | head -n 1)"
 
           mkdir -p \
@@ -447,18 +411,9 @@ jobs:
           test -s \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
-          echo "Staged mGBA:"
-          ls -lh \
-            project/mgba/build-hoenn-3ds/libmgba-static.a
-
 
       # ============================================================
-      # 13. BUILD 3DS GRAPHICS LIBRARIES
-      #
-      # This fixes:
-      #   cannot find -lcitro2d
-      #   cannot find -lcitro3d
-      #   cannot find -lctru
+      # 13. BUILD LIBCTRU / CITRO3D / CITRO2D
       # ============================================================
 
       - name: Build 3DS libraries
@@ -471,16 +426,15 @@ jobs:
 
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
 
+          rm -rf /tmp/3ds-libraries
           mkdir -p /tmp/3ds-libraries
 
           cd /tmp/3ds-libraries
 
 
-          # ----------------------------------------------------------
-          # libctru
-          # ----------------------------------------------------------
-
-          rm -rf libctru-2.7.0
+          # ========================================================
+          # LIBCTRU
+          # ========================================================
 
           wget -O libctru.tar.gz \
             https://github.com/devkitPro/libctru/archive/refs/tags/v2.7.0.tar.gz
@@ -488,13 +442,29 @@ jobs:
           tar \
             -xzf libctru.tar.gz
 
-          LIBCTRU_DIR="$(find /tmp/3ds-libraries \
-            -maxdepth 1 \
-            -type d \
-            -name 'libctru-*' \
+          echo "libctru archive contents:"
+          find /tmp/3ds-libraries/libctru-2.7.0 \
+            -maxdepth 3 \
+            -type f \
+            | head -80
+
+          LIBCTRU_MAKEFILE="$(find \
+            /tmp/3ds-libraries/libctru-2.7.0 \
+            -type f \
+            -name Makefile \
             | head -n 1)"
 
-          echo "Building libctru:"
+          if [ -z "$LIBCTRU_MAKEFILE" ]; then
+            echo "ERROR: libctru Makefile not found."
+            exit 1
+          fi
+
+          LIBCTRU_DIR="$(dirname "$LIBCTRU_MAKEFILE")"
+
+          echo "libctru Makefile:"
+          echo "$LIBCTRU_MAKEFILE"
+
+          echo "libctru build directory:"
           echo "$LIBCTRU_DIR"
 
           make \
@@ -506,11 +476,9 @@ jobs:
             install
 
 
-          # ----------------------------------------------------------
-          # citro3d
-          # ----------------------------------------------------------
-
-          rm -rf citro3d-1.7.1
+          # ========================================================
+          # CITRO3D
+          # ========================================================
 
           wget -O citro3d.tar.gz \
             https://github.com/devkitPro/citro3d/archive/refs/tags/v1.7.1.tar.gz
@@ -518,13 +486,21 @@ jobs:
           tar \
             -xzf citro3d.tar.gz
 
-          CITRO3D_DIR="$(find /tmp/3ds-libraries \
-            -maxdepth 1 \
-            -type d \
-            -name 'citro3d-*' \
+          CITRO3D_MAKEFILE="$(find \
+            /tmp/3ds-libraries/citro3d-1.7.1 \
+            -maxdepth 2 \
+            -type f \
+            -name Makefile \
             | head -n 1)"
 
-          echo "Building citro3d:"
+          if [ -z "$CITRO3D_MAKEFILE" ]; then
+            echo "ERROR: citro3d Makefile not found."
+            exit 1
+          fi
+
+          CITRO3D_DIR="$(dirname "$CITRO3D_MAKEFILE")"
+
+          echo "citro3d directory:"
           echo "$CITRO3D_DIR"
 
           make \
@@ -536,11 +512,9 @@ jobs:
             install
 
 
-          # ----------------------------------------------------------
-          # citro2d
-          # ----------------------------------------------------------
-
-          rm -rf citro2d-1.7.0
+          # ========================================================
+          # CITRO2D
+          # ========================================================
 
           wget -O citro2d.tar.gz \
             https://github.com/devkitPro/citro2d/archive/refs/tags/v1.7.0.tar.gz
@@ -548,13 +522,21 @@ jobs:
           tar \
             -xzf citro2d.tar.gz
 
-          CITRO2D_DIR="$(find /tmp/3ds-libraries \
-            -maxdepth 1 \
-            -type d \
-            -name 'citro2d-*' \
+          CITRO2D_MAKEFILE="$(find \
+            /tmp/3ds-libraries/citro2d-1.7.0 \
+            -maxdepth 2 \
+            -type f \
+            -name Makefile \
             | head -n 1)"
 
-          echo "Building citro2d:"
+          if [ -z "$CITRO2D_MAKEFILE" ]; then
+            echo "ERROR: citro2d Makefile not found."
+            exit 1
+          fi
+
+          CITRO2D_DIR="$(dirname "$CITRO2D_MAKEFILE")"
+
+          echo "citro2d directory:"
           echo "$CITRO2D_DIR"
 
           make \
@@ -566,30 +548,40 @@ jobs:
             install
 
 
-          # ----------------------------------------------------------
-          # Verify installed libraries
-          # ----------------------------------------------------------
+          # ========================================================
+          # VERIFY
+          # ========================================================
 
           echo "========================================"
-          echo "VERIFYING 3DS LIBRARIES"
+          echo "CHECKING 3DS LIBRARIES"
           echo "========================================"
 
-          test -f "$DEVKITPRO/libctru/lib/libctru.a"
-          test -f "$DEVKITPRO/libctru/lib/libcitro3d.a"
-          test -f "$DEVKITPRO/libctru/lib/libcitro2d.a"
+          find "$DEVKITPRO/libctru" \
+            -maxdepth 3 \
+            -type f \
+            \( \
+              -name 'libctru.a' \
+              -o \
+              -name 'libcitro3d.a' \
+              -o \
+              -name 'libcitro2d.a' \
+            \) \
+            -print
 
-          echo "libctru:"
-          ls -lh "$DEVKITPRO/libctru/lib/libctru.a"
+          test -f \
+            "$DEVKITPRO/libctru/lib/libctru.a"
 
-          echo "libcitro3d:"
-          ls -lh "$DEVKITPRO/libctru/lib/libcitro3d.a"
+          test -f \
+            "$DEVKITPRO/libctru/lib/libcitro3d.a"
 
-          echo "libcitro2d:"
-          ls -lh "$DEVKITPRO/libctru/lib/libcitro2d.a"
+          test -f \
+            "$DEVKITPRO/libctru/lib/libcitro2d.a"
+
+          echo "3DS libraries successfully installed."
 
 
       # ============================================================
-      # 14. PATCH PROJECT MAKEFILE
+      # 14. PATCH MAKEFILE
       # ============================================================
 
       - name: Patch Hoenn Reborn Makefile
@@ -604,41 +596,19 @@ jobs:
 
           s = p.read_text()
 
-          # ----------------------------------------------------------
-          # Correct mGBA directory.
-          #
-          # The source is staged at:
-          #
-          #   project/mgba
-          #
-          # not:
-          #
-          #   ../mgba
-          # ----------------------------------------------------------
-
+          # Fix mGBA path.
           s = s.replace(
               "MGBA_DIR ?= ../mgba",
               "MGBA_DIR ?= ./mgba"
           )
 
-          # ----------------------------------------------------------
-          # Correct tex3ds syntax.
-          #
-          # -i means include options file.
-          # PNG must be passed as the input argument.
-          # ----------------------------------------------------------
-
+          # Fix tex3ds PNG syntax.
           s = s.replace(
               "tex3ds -i $< -o $@",
               'tex3ds "$<" -o "$@"'
           )
 
-          # ----------------------------------------------------------
-          # Prevent Make from trying to rebuild mGBA.
-          #
-          # mGBA is already built and staged by the workflow.
-          # ----------------------------------------------------------
-
+          # Prevent make from trying to rebuild mGBA.
           if "mgba-core:" in s and "\n3dsx:" in s:
               start = s.index("mgba-core:")
               end = s.index("\n3dsx:", start)
@@ -658,54 +628,41 @@ jobs:
 
 
       # ============================================================
-      # 15. SHOW FINAL MAKEFILE SETTINGS
+      # 15. VERIFY MAKEFILE
       # ============================================================
 
-      - name: Verify Makefile configuration
+      - name: Verify Makefile
         shell: bash
         run: |
           set -eux
-
-          echo "========================================"
-          echo "MGBA SETTINGS"
-          echo "========================================"
 
           grep -n \
             -E 'MGBA_DIR|MGBA_LIB|MGBA_INC|MGBA_GEN_INC' \
             project/Makefile \
             || true
 
-          echo "========================================"
-          echo "TEX3DS RULE"
-          echo "========================================"
+          echo "--------------------------------"
 
           grep -n \
-            'tex3ds' \
+            tex3ds \
             project/Makefile \
             || true
 
-          echo "========================================"
-          echo "LIBS"
-          echo "========================================"
+          echo "--------------------------------"
 
           grep -n \
             '^LIBS' \
             project/Makefile \
             || true
 
-          echo "========================================"
-          echo "MGBA LIBRARY"
-          echo "========================================"
+          echo "--------------------------------"
 
           test -s \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
-          ls -lh \
-            project/mgba/build-hoenn-3ds/libmgba-static.a
-
 
       # ============================================================
-      # 16. BUILD HOENN REBORN
+      # 16. BUILD
       # ============================================================
 
       - name: Build Hoenn Reborn
@@ -738,7 +695,6 @@ jobs:
 
           test -f project/Hoenn_Reborn.cia
 
-          echo "CIA created:"
           ls -lh project/Hoenn_Reborn.cia
 
           wc -c project/Hoenn_Reborn.cia
@@ -755,7 +711,6 @@ jobs:
 
           test -f project/Hoenn_Reborn.3dsx
 
-          echo "3DSX created:"
           ls -lh project/Hoenn_Reborn.3dsx
 
           wc -c project/Hoenn_Reborn.3dsx
@@ -772,7 +727,6 @@ jobs:
 
           test -f project/Hoenn_Reborn.elf
 
-          echo "ELF created:"
           ls -lh project/Hoenn_Reborn.elf
 
           wc -c project/Hoenn_Reborn.elf
@@ -818,10 +772,10 @@ jobs:
 
 
       # ============================================================
-      # 23. ALWAYS UPLOAD BUILD LOGS
+      # 23. ALWAYS UPLOAD BUILD FILES
       # ============================================================
 
-      - name: Upload build logs
+      - name: Upload build files
         if: always()
         uses: actions/upload-artifact@v4
         with:
