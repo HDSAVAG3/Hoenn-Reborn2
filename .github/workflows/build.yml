@@ -17,14 +17,14 @@ jobs:
     steps:
 
       # ============================================================
-      # 1. CHECKOUT
+      # CHECKOUT
       # ============================================================
 
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # ============================================================
-      # 2. BASIC TOOLS
+      # BASIC TOOLS
       # ============================================================
 
       - name: Install build utilities
@@ -45,7 +45,7 @@ jobs:
             git
 
       # ============================================================
-      # 3. DEVKITPRO
+      # DEVKITPRO
       # ============================================================
 
       - name: Configure devkitPro
@@ -69,7 +69,7 @@ jobs:
           cmake --version
 
       # ============================================================
-      # 4. EXTRACT PROJECT
+      # EXTRACT PROJECT
       # ============================================================
 
       - name: Extract Hoenn Reborn project
@@ -119,7 +119,7 @@ jobs:
           echo "Project extracted."
 
       # ============================================================
-      # 5. BANNERTOOL
+      # BANNERTOOL
       # ============================================================
 
       - name: Install bannertool
@@ -157,10 +157,8 @@ jobs:
           test -x \
             /usr/local/bin/bannertool
 
-          command -v bannertool
-
       # ============================================================
-      # 6. MAKEROM
+      # MAKEROM
       # ============================================================
 
       - name: Install makerom
@@ -196,10 +194,8 @@ jobs:
           chmod +x \
             /usr/local/bin/makerom
 
-          command -v makerom
-
       # ============================================================
-      # 7. 3DS TOOLS
+      # 3DS TOOLS
       # ============================================================
 
       - name: Install 3DS tools
@@ -222,16 +218,10 @@ jobs:
             /tmp/3dstools/opt/devkitpro/. \
             /opt/devkitpro/
 
-          find /opt/devkitpro \
-            -type f \
-            -name 3dsxtool \
-            -exec chmod +x {} \; \
-            || true
-
           echo "/opt/devkitpro/tools/bin" >> "$GITHUB_PATH"
 
       # ============================================================
-      # 8. TEX3DS
+      # TEX3DS
       # ============================================================
 
       - name: Install tex3ds
@@ -254,16 +244,10 @@ jobs:
             /tmp/tex3ds/opt/devkitpro/. \
             /opt/devkitpro/
 
-          find /opt/devkitpro \
-            -type f \
-            -name tex3ds \
-            -exec chmod +x {} \; \
-            || true
-
           echo "/opt/devkitpro/tools/bin" >> "$GITHUB_PATH"
 
       # ============================================================
-      # 9. VERIFY TOOLS
+      # VERIFY TOOLS
       # ============================================================
 
       - name: Verify tools
@@ -284,7 +268,7 @@ jobs:
             | head -20
 
       # ============================================================
-      # 10. DOWNLOAD MGBA
+      # DOWNLOAD MGBA
       # ============================================================
 
       - name: Download mGBA
@@ -306,11 +290,8 @@ jobs:
             "$GITHUB_WORKSPACE/mgba-0.10.5" \
             "$GITHUB_WORKSPACE/mgba"
 
-          test -f \
-            "$GITHUB_WORKSPACE/mgba/CMakeLists.txt"
-
       # ============================================================
-      # 11. BUILD MGBA
+      # BUILD MGBA
       # ============================================================
 
       - name: Build mGBA
@@ -350,15 +331,10 @@ jobs:
             -name libmgba.a \
             | head -n 1)"
 
-          if [ -z "$MGBA_LIB_SRC" ]; then
-            echo "ERROR: libmgba.a not found."
-            exit 1
-          fi
-
-          ls -lh "$MGBA_LIB_SRC"
+          test -n "$MGBA_LIB_SRC"
 
       # ============================================================
-      # 12. STAGE MGBA
+      # STAGE MGBA
       # ============================================================
 
       - name: Stage mGBA
@@ -406,28 +382,23 @@ jobs:
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
       # ============================================================
-      # 13. BUILD 3DS LIBRARIES
+      # BUILD LIBCTRU
       # ============================================================
 
-      - name: Build 3DS libraries
+      - name: Build libctru
         shell: bash
         run: |
           set -eux
 
           export DEVKITPRO=/opt/devkitpro
           export DEVKITARM=/opt/devkitpro/devkitARM
-
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
 
-          rm -rf /tmp/3ds-libraries
+          rm -rf /tmp/libctru
 
-          mkdir -p /tmp/3ds-libraries
+          mkdir -p /tmp/libctru
 
-          cd /tmp/3ds-libraries
-
-          # ========================================================
-          # LIBCTRU
-          # ========================================================
+          cd /tmp/libctru
 
           wget -O libctru.tar.gz \
             https://github.com/devkitPro/libctru/archive/refs/tags/v2.7.0.tar.gz
@@ -435,11 +406,7 @@ jobs:
           tar \
             -xzf libctru.tar.gz
 
-          LIBCTRU_ROOT="/tmp/3ds-libraries/libctru-2.7.0"
-
-          echo "========================================"
-          echo "LOCATING GDBHIO.C"
-          echo "========================================"
+          LIBCTRU_ROOT="/tmp/libctru/libctru-2.7.0"
 
           GDBHIO_FILE="$(find \
             "$LIBCTRU_ROOT" \
@@ -447,26 +414,7 @@ jobs:
             -name gdbhio.c \
             | head -n 1)"
 
-          if [ -z "$GDBHIO_FILE" ]; then
-            echo "ERROR: gdbhio.c not found."
-            exit 1
-          fi
-
-          echo "Found:"
-          echo "$GDBHIO_FILE"
-
-          # ========================================================
-          # FIX CURRENT DEVKITARM WARNING
-          #
-          # Do NOT replace CFLAGS.
-          #
-          # Replacing CFLAGS removes libctru's normal include
-          # directories and causes:
-          #
-          # fatal error: 3ds/types.h: No such file or directory
-          #
-          # Instead, make the variable explicitly used.
-          # ========================================================
+          test -n "$GDBHIO_FILE"
 
           python3 - "$GDBHIO_FILE" <<'PY'
           import sys
@@ -484,45 +432,34 @@ jobs:
                   1
               )
               p.write_text(s)
-              print("Patched gdbMode warning.")
-          else:
-              print("gdbMode declaration already patched or formatting differs.")
+
+          print("libctru gdbMode patch complete.")
           PY
 
-          # ========================================================
-          # FIND MAKEFILE
-          # ========================================================
+          cd "$LIBCTRU_ROOT"
 
-          LIBCTRU_MAKEFILE="$(find \
-            "$LIBCTRU_ROOT" \
-            -type f \
-            -name Makefile \
-            | head -n 1)"
-
-          if [ -z "$LIBCTRU_MAKEFILE" ]; then
-            echo "ERROR: libctru Makefile not found."
-            exit 1
-          fi
-
-          LIBCTRU_DIR="$(dirname "$LIBCTRU_MAKEFILE")"
-
-          echo "========================================"
-          echo "BUILDING LIBCTRU"
-          echo "========================================"
-
-          cd "$LIBCTRU_DIR"
-
-          # IMPORTANT:
-          # No CFLAGS override here.
           make -j2
 
           make install
 
-          # ========================================================
-          # CITRO3D
-          # ========================================================
+      # ============================================================
+      # BUILD CITRO3D
+      # ============================================================
 
-          cd /tmp/3ds-libraries
+      - name: Build citro3d
+        shell: bash
+        run: |
+          set -eux
+
+          export DEVKITPRO=/opt/devkitpro
+          export DEVKITARM=/opt/devkitpro/devkitARM
+          export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
+
+          rm -rf /tmp/citro3d
+
+          mkdir -p /tmp/citro3d
+
+          cd /tmp/citro3d
 
           wget -O citro3d.tar.gz \
             https://github.com/devkitPro/citro3d/archive/refs/tags/v1.7.1.tar.gz
@@ -530,38 +467,36 @@ jobs:
           tar \
             -xzf citro3d.tar.gz
 
-          CITRO3D_ROOT="/tmp/3ds-libraries/citro3d-1.7.1"
+          CITRO3D_ROOT="/tmp/citro3d/citro3d-1.7.1"
 
-          CITRO3D_MAKEFILE="$(find \
-            "$CITRO3D_ROOT" \
-            -type f \
-            -name Makefile \
-            | head -n 1)"
+          test -f \
+            "$CITRO3D_ROOT/Makefile"
 
-          if [ -z "$CITRO3D_MAKEFILE" ]; then
-            echo "ERROR: citro3d Makefile not found."
-            exit 1
-          fi
+          cd "$CITRO3D_ROOT"
 
-          CITRO3D_DIR="$(dirname "$CITRO3D_MAKEFILE")"
+          make -j2
 
-          echo "========================================"
-          echo "BUILDING CITRO3D"
-          echo "========================================"
+          make install
 
-          make \
-            -C "$CITRO3D_DIR" \
-            -j2
+      # ============================================================
+      # BUILD CITRO2D
+      # ============================================================
 
-          make \
-            -C "$CITRO3D_DIR" \
-            install
+      - name: Build citro2d
+        shell: bash
+        run: |
+          set -eux
 
-          # ========================================================
-          # CITRO2D
-          # ========================================================
+          export DEVKITPRO=/opt/devkitpro
+          export DEVKITARM=/opt/devkitpro/devkitARM
 
-          cd /tmp/3ds-libraries
+          export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
+
+          rm -rf /tmp/citro2d
+
+          mkdir -p /tmp/citro2d
+
+          cd /tmp/citro2d
 
           wget -O citro2d.tar.gz \
             https://github.com/devkitPro/citro2d/archive/refs/tags/v1.7.0.tar.gz
@@ -569,39 +504,58 @@ jobs:
           tar \
             -xzf citro2d.tar.gz
 
-          CITRO2D_ROOT="/tmp/3ds-libraries/citro2d-1.7.0"
+          CITRO2D_ROOT="/tmp/citro2d/citro2d-1.7.0"
 
-          CITRO2D_MAKEFILE="$(find \
-            "$CITRO2D_ROOT" \
-            -type f \
-            -name Makefile \
-            | head -n 1)"
+          echo "========================================"
+          echo "CITRO2D SOURCE"
+          echo "========================================"
 
-          if [ -z "$CITRO2D_MAKEFILE" ]; then
-            echo "ERROR: citro2d Makefile not found."
-            exit 1
-          fi
+          ls -la \
+            "$CITRO2D_ROOT"
 
-          CITRO2D_DIR="$(dirname "$CITRO2D_MAKEFILE")"
+          test -f \
+            "$CITRO2D_ROOT/CMakeLists.txt"
+
+          echo "========================================"
+          echo "CONFIGURING CITRO2D"
+          echo "========================================"
+
+          rm -rf \
+            "$CITRO2D_ROOT/build"
+
+          cmake \
+            -S "$CITRO2D_ROOT" \
+            -B "$CITRO2D_ROOT/build" \
+            -DCMAKE_INSTALL_PREFIX="$DEVKITPRO/libctru"
 
           echo "========================================"
           echo "BUILDING CITRO2D"
           echo "========================================"
 
-          make \
-            -C "$CITRO2D_DIR" \
+          cmake \
+            --build "$CITRO2D_ROOT/build" \
             -j2
 
-          make \
-            -C "$CITRO2D_DIR" \
-            install
+          echo "========================================"
+          echo "INSTALLING CITRO2D"
+          echo "========================================"
 
-          # ========================================================
-          # VERIFY
-          # ========================================================
+          cmake \
+            --install "$CITRO2D_ROOT/build"
+
+      # ============================================================
+      # VERIFY GRAPHICS LIBRARIES
+      # ============================================================
+
+      - name: Verify 3DS libraries
+        shell: bash
+        run: |
+          set -eux
+
+          export DEVKITPRO=/opt/devkitpro
 
           echo "========================================"
-          echo "VERIFYING 3DS LIBRARIES"
+          echo "LIBRARY FILES"
           echo "========================================"
 
           find "$DEVKITPRO" \
@@ -615,6 +569,20 @@ jobs:
             \) \
             -print
 
+          echo "========================================"
+          echo "HEADERS"
+          echo "========================================"
+
+          find "$DEVKITPRO/libctru/include" \
+            -maxdepth 2 \
+            -type f \
+            \( \
+              -name citro3d.h \
+              -o \
+              -name citro2d.h \
+            \) \
+            -print
+
           test -f \
             "$DEVKITPRO/libctru/lib/libctru.a"
 
@@ -624,10 +592,10 @@ jobs:
           test -f \
             "$DEVKITPRO/libctru/lib/libcitro2d.a"
 
-          echo "ALL 3DS LIBRARIES READY"
+          echo "ALL GRAPHICS LIBRARIES READY"
 
       # ============================================================
-      # 14. PATCH HOENN REBORN MAKEFILE
+      # PATCH HOENN REBORN MAKEFILE
       # ============================================================
 
       - name: Patch Hoenn Reborn Makefile
@@ -642,19 +610,19 @@ jobs:
 
           s = p.read_text()
 
-          # mGBA lives inside project/mgba.
+          # mGBA is staged inside project/mgba.
           s = s.replace(
               "MGBA_DIR ?= ../mgba",
               "MGBA_DIR ?= ./mgba"
           )
 
-          # tex3ds takes the PNG as a positional argument.
+          # tex3ds input is positional, not -i.
           s = s.replace(
               "tex3ds -i $< -o $@",
               'tex3ds "$<" -o "$@"'
           )
 
-          # Don't rebuild staged mGBA.
+          # Never rebuild the staged mGBA library.
           if "mgba-core:" in s and "\n3dsx:" in s:
               start = s.index("mgba-core:")
               end = s.index("\n3dsx:", start)
@@ -673,7 +641,7 @@ jobs:
           PY
 
       # ============================================================
-      # 15. VERIFY MAKEFILE
+      # VERIFY MAKEFILE
       # ============================================================
 
       - name: Verify Makefile
@@ -681,37 +649,25 @@ jobs:
         run: |
           set -eux
 
-          echo "========================================"
-          echo "MGBA SETTINGS"
-          echo "========================================"
-
+          echo "MGBA:"
           grep -n \
             -E 'MGBA_DIR|MGBA_LIB|MGBA_INC|MGBA_GEN_INC' \
             project/Makefile \
             || true
 
-          echo "========================================"
-          echo "TEX3DS"
-          echo "========================================"
-
+          echo "TEX3DS:"
           grep -n \
             tex3ds \
             project/Makefile \
             || true
 
-          echo "========================================"
-          echo "LIBS"
-          echo "========================================"
-
+          echo "LIBS:"
           grep -n \
             '^LIBS' \
             project/Makefile \
             || true
 
-          echo "========================================"
-          echo "MGBA LIBRARY"
-          echo "========================================"
-
+          echo "MGBA STATIC:"
           ls -lh \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
@@ -719,7 +675,7 @@ jobs:
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
       # ============================================================
-      # 16. BUILD HOENN REBORN
+      # BUILD HOENN REBORN
       # ============================================================
 
       - name: Build Hoenn Reborn
@@ -741,7 +697,7 @@ jobs:
           make -j1
 
       # ============================================================
-      # 17. VERIFY CIA
+      # VERIFY CIA
       # ============================================================
 
       - name: Verify CIA
@@ -755,11 +711,8 @@ jobs:
           ls -lh \
             project/Hoenn_Reborn.cia
 
-          wc -c \
-            project/Hoenn_Reborn.cia
-
       # ============================================================
-      # 18. VERIFY 3DSX
+      # VERIFY 3DSX
       # ============================================================
 
       - name: Verify 3DSX
@@ -773,11 +726,8 @@ jobs:
           ls -lh \
             project/Hoenn_Reborn.3dsx
 
-          wc -c \
-            project/Hoenn_Reborn.3dsx
-
       # ============================================================
-      # 19. VERIFY ELF
+      # VERIFY ELF
       # ============================================================
 
       - name: Verify ELF
@@ -791,11 +741,8 @@ jobs:
           ls -lh \
             project/Hoenn_Reborn.elf
 
-          wc -c \
-            project/Hoenn_Reborn.elf
-
       # ============================================================
-      # 20. UPLOAD CIA
+      # UPLOAD CIA
       # ============================================================
 
       - name: Upload CIA
@@ -807,7 +754,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # 21. UPLOAD 3DSX
+      # UPLOAD 3DSX
       # ============================================================
 
       - name: Upload 3DSX
@@ -819,7 +766,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # 22. UPLOAD ELF
+      # UPLOAD ELF
       # ============================================================
 
       - name: Upload ELF
@@ -831,7 +778,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # 23. ALWAYS UPLOAD BUILD FILES
+      # ALWAYS UPLOAD BUILD FILES
       # ============================================================
 
       - name: Upload build files
