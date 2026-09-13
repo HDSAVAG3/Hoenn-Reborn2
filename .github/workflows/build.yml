@@ -1,13 +1,10 @@
-name: Build Hoenn Reborn
+name: Build Hoenn Reborn 3DS
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
-
-permissions:
-  contents: read
 
 jobs:
   build:
@@ -17,49 +14,127 @@ jobs:
       image: devkitpro/devkitarm
 
     steps:
-      - name: Get project
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Extract project
         run: |
-          mkdir project
-          unzip -q Hoenn_Reborn_GitHub_Build.zip -d project
-          cd project
-          ls -la
+          mkdir -p project
+          unzip -o Hoenn_Reborn_GitHub_Build.zip -d project
 
-      - name: Clone mGBA
+      - name: Install build tools
         run: |
-          git clone --depth 1 https://github.com/mgba-emu/mgba.git mgba
+          dkp-pacman -Syu --noconfirm
+          dkp-pacman -S --needed --noconfirm \
+            3ds-dev \
+            3ds-cmake \
+            3ds-tools \
+            git \
+            cmake \
+            make
 
-      - name: Build mGBA
+      - name: Download mGBA 0.10.5
         run: |
-          cd mgba
-          mkdir build
-          cd build
+          git clone --depth 1 --branch 0.10.5 \
+            https://github.com/mgba-emu/mgba.git mgba
+
+      - name: Configure mGBA
+        run: |
+          mkdir -p mgba/build
+          cd mgba/build
+
           cmake .. \
             -DCMAKE_TOOLCHAIN_FILE=../src/platform/3ds/CMakeToolchain.txt \
-            -D3DS=ON \
+            -DCMAKE_BUILD_TYPE=Release \
             -DLIBMGBA_ONLY=ON \
             -DBUILD_STATIC=ON \
-            -DBUILD_SHARED=OFF
-          make -j2
+            -DBUILD_SHARED=OFF \
+            -DSKIP_LIBRARY=OFF \
+            -DM_CORE_GBA=ON \
+            -DM_CORE_GB=OFF \
+            -DMINIMAL_CORE=ON \
+            -DDISABLE_FRONTENDS=ON \
+            -DBUILD_SDL=OFF \
+            -DBUILD_QT=OFF \
+            -DBUILD_GL=OFF \
+            -DBUILD_GLES2=OFF \
+            -DBUILD_GLES3=OFF \
+            -DUSE_PNG=OFF \
+            -DUSE_ZLIB=OFF \
+            -DUSE_LUA=OFF \
+            -DENABLE_SCRIPTING=OFF \
+            -DBUILD_TEST=OFF \
+            -DBUILD_SUITE=OFF \
+            -DBUILD_CINEMA=OFF \
+            -DBUILD_EXAMPLE=OFF \
+            -DBUILD_PERF=OFF \
+            -DDISABLE_DEPS=ON
+
+      - name: Build mGBA core
+        run: |
+          cmake --build mgba/build \
+            --target mgba \
+            --parallel 2
+
+      - name: Prepare mGBA headers and library
+        run: |
+          mkdir -p project/vendor/mgba/include
+          mkdir -p project/vendor/mgba/lib
+
+          cp -R mgba/include/mgba \
+            project/vendor/mgba/include/
+
+          cp -R mgba/include/mgba-util \
+            project/vendor/mgba/include/
+
+          cp -R mgba/build/include/mgba \
+            project/vendor/mgba/include/ 2>/dev/null || true
+
+          cp mgba/build/libmgba.a \
+            project/vendor/mgba/lib/libmgba.a
 
       - name: Build Hoenn Reborn
+        working-directory: project
         run: |
-          cd project
+          make clean || true
           make -j2
 
-      - name: Show build files
-        if: always()
+      - name: Check build outputs
         run: |
-          find project -type f \( -name "*.cia" -o -name "*.3dsx" -o -name "*.elf" \) -print
+          echo "===== BUILD OUTPUTS ====="
+          find project -type f \
+            \( -name "*.cia" -o -name "*.3dsx" -o -name "*.elf" \) \
+            -print
 
-      - name: Upload build
+      - name: Upload CIA
         uses: actions/upload-artifact@v4
         with:
-          name: Hoenn-Reborn-Build
+          name: Hoenn-Reborn-CIA
           path: |
-            project/*.cia
-            project/*.3dsx
-            project/*.elf
+            project/**/*.cia
+          if-no-files-found: error
+
+      - name: Upload 3DSX
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hoenn-Reborn-3DSX
+          path: |
+            project/**/*.3dsx
           if-no-files-found: warn
+
+      - name: Upload ELF
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hoenn-Reborn-ELF
+          path: |
+            project/**/*.elf
+          if-no-files-found: warn
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            mgba/build/CMakeCache.txt
+            mgba/build/CMakeFiles/**
