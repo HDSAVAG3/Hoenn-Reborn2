@@ -15,8 +15,17 @@ jobs:
 
     steps:
 
+      # ============================================================
+      # CHECKOUT
+      # ============================================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
+
+
+      # ============================================================
+      # DEVKITPRO ENVIRONMENT
+      # ============================================================
 
       - name: Initialize devkitPro environment
         run: |
@@ -29,55 +38,326 @@ jobs:
           echo "$DEVKITPRO/tools/bin" >> "$GITHUB_PATH"
 
           echo "===== GCC ====="
+
           "$DEVKITARM/bin/arm-none-eabi-gcc" --version
 
-          echo "===== 3DS TOOLS ====="
-          command -v makerom || true
-          command -v bannertool || true
-          command -v 3dsxtool || true
-          command -v tex3ds || true
+
+      # ============================================================
+      # VERIFY COMPILER
+      # ============================================================
 
       - name: Verify devkitPro environment
         run: |
-          echo "===== ENVIRONMENT ====="
+          echo "======================================"
+          echo "      DEVKITPRO ENVIRONMENT"
+          echo "======================================"
 
           echo "DEVKITPRO=$DEVKITPRO"
           echo "DEVKITARM=$DEVKITARM"
 
+          echo ""
           echo "===== GCC ====="
 
           command -v arm-none-eabi-gcc
           arm-none-eabi-gcc --version
 
+          echo ""
           echo "===== G++ ====="
 
           command -v arm-none-eabi-g++
           arm-none-eabi-g++ --version
 
+          echo ""
           echo "===== AR ====="
 
           command -v arm-none-eabi-ar
 
-          echo "===== 3DS TOOLS ====="
 
-          command -v makerom || true
-          command -v bannertool || true
-          command -v 3dsxtool || true
-          command -v tex3ds || true
+      # ============================================================
+      # EXTRACT PROJECT
+      # ============================================================
 
       - name: Extract Hoenn Reborn project
         run: |
           rm -rf project
+
           mkdir -p project
 
           unzip -o Hoenn_Reborn_GitHub_Build.zip -d project
 
-          echo "===== PROJECT CONTENTS ====="
+          echo "======================================"
+          echo "       PROJECT CONTENTS"
+          echo "======================================"
 
           find project \
             -maxdepth 3 \
             -type f \
             | sort
+
+
+      # ============================================================
+      # INSTALL 3DS PACKAGING TOOLS
+      #
+      # These are separate from devkitARM.
+      #
+      # We download the current Linux releases directly from
+      # their official GitHub repositories instead of using
+      # dkp-pacman, because the pacman server previously returned
+      # HTTP 403 in GitHub Actions.
+      # ============================================================
+
+      - name: Install 3DS packaging tools
+        run: |
+          set -e
+
+          echo "======================================"
+          echo "    INSTALLING 3DS PACKAGING TOOLS"
+          echo "======================================"
+
+          mkdir -p /tmp/3ds-tools
+
+          python3 <<'PY'
+          import json
+          import urllib.request
+          import os
+          import re
+
+          repos = [
+              "3DSGuy/Project_CTR",
+              "Epicpkmn11/bannertool",
+              "devkitPro/3dstools",
+              "devkitPro/tex3ds",
+          ]
+
+          for repo in repos:
+              url = f"https://api.github.com/repos/{repo}/releases/latest"
+
+              print()
+              print("======================================")
+              print("Repository:", repo)
+              print("======================================")
+
+              request = urllib.request.Request(
+                  url,
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "User-Agent": "Hoenn-Reborn-GitHub-Action"
+                  }
+              )
+
+              with urllib.request.urlopen(request) as response:
+                  data = json.load(response)
+
+              print("Release:", data.get("tag_name"))
+
+              assets = data.get("assets", [])
+
+              for asset in assets:
+                  print("  ", asset["name"])
+
+              for asset in assets:
+                  name = asset["name"].lower()
+
+                  if (
+                      "linux" in name
+                      and (
+                          name.endswith(".zip")
+                          or name.endswith(".tar.gz")
+                          or name.endswith(".tgz")
+                          or name.endswith(".tar.xz")
+                      )
+                  ):
+                      print("SELECTED:", asset["browser_download_url"])
+
+                      filename = asset["name"]
+
+                      with urllib.request.urlopen(
+                          urllib.request.Request(
+                              asset["browser_download_url"],
+                              headers={
+                                  "User-Agent": "Hoenn-Reborn-GitHub-Action"
+                              }
+                          )
+                      ) as response:
+                          with open(
+                              "/tmp/3ds-tools/" + filename,
+                              "wb"
+                          ) as output:
+                              output.write(response.read())
+
+                      break
+              else:
+                  print("WARNING: No Linux archive automatically selected.")
+
+          print()
+          print("Downloaded files:")
+
+          for name in os.listdir("/tmp/3ds-tools"):
+              print(" ", name)
+          PY
+
+          echo ""
+          echo "======================================"
+          echo "        EXTRACTING TOOLS"
+          echo "======================================"
+
+          cd /tmp/3ds-tools
+
+          for archive in *.zip; do
+            if [ -f "$archive" ]; then
+              echo "Extracting $archive"
+              unzip -o "$archive" -d extracted
+            fi
+          done
+
+          for archive in *.tar.gz; do
+            if [ -f "$archive" ]; then
+              echo "Extracting $archive"
+              mkdir -p extracted
+              tar -xzf "$archive" -C extracted
+            fi
+          done
+
+          for archive in *.tgz; do
+            if [ -f "$archive" ]; then
+              echo "Extracting $archive"
+              mkdir -p extracted
+              tar -xzf "$archive" -C extracted
+            fi
+          done
+
+          for archive in *.tar.xz; do
+            if [ -f "$archive" ]; then
+              echo "Extracting $archive"
+              mkdir -p extracted
+              tar -xJf "$archive" -C extracted
+            fi
+          done
+
+          echo ""
+          echo "======================================"
+          echo "       SEARCHING FOR TOOLS"
+          echo "======================================"
+
+          find /tmp/3ds-tools/extracted \
+            -type f \
+            \( \
+              -name "bannertool" \
+              -o \
+              -name "makerom" \
+              -o \
+              -name "3dsxtool" \
+              -o \
+              -name "smdhtool" \
+              -o \
+              -name "tex3ds" \
+            \) \
+            -print
+
+
+      # ============================================================
+      # INSTALL FOUND TOOLS INTO DEVKITPRO TOOLS BIN
+      # ============================================================
+
+      - name: Install discovered 3DS tools
+        run: |
+          set -e
+
+          mkdir -p "$DEVKITPRO/tools/bin"
+
+          echo "======================================"
+          echo "       INSTALLING DISCOVERED TOOLS"
+          echo "======================================"
+
+          for tool in \
+            bannertool \
+            makerom \
+            3dsxtool \
+            smdhtool \
+            tex3ds
+          do
+
+            FOUND=$(find /tmp/3ds-tools/extracted \
+              -type f \
+              -name "$tool" \
+              | head -n 1)
+
+            if [ -n "$FOUND" ]; then
+              echo "Installing $tool"
+              cp "$FOUND" "$DEVKITPRO/tools/bin/$tool"
+              chmod +x "$DEVKITPRO/tools/bin/$tool"
+            else
+              echo "WARNING: $tool was not found."
+            fi
+
+          done
+
+          export PATH="$DEVKITPRO/tools/bin:$DEVKITARM/bin:$PATH"
+
+          echo "$DEVKITPRO/tools/bin" >> "$GITHUB_PATH"
+
+
+      # ============================================================
+      # VERIFY PACKAGING TOOLS
+      # ============================================================
+
+      - name: Verify 3DS packaging tools
+        run: |
+          export PATH="$DEVKITPRO/tools/bin:$DEVKITARM/bin:$PATH"
+
+          echo "======================================"
+          echo "       3DS TOOL VERIFICATION"
+          echo "======================================"
+
+          echo ""
+          echo "===== BANNERTOOL ====="
+
+          if command -v bannertool; then
+            bannertool --help || true
+          else
+            echo "ERROR: bannertool was not installed."
+            exit 1
+          fi
+
+          echo ""
+          echo "===== MAKEROM ====="
+
+          if command -v makerom; then
+            makerom -h || true
+          else
+            echo "ERROR: makerom was not installed."
+            exit 1
+          fi
+
+          echo ""
+          echo "===== 3DSXTOOL ====="
+
+          if command -v 3dsxtool; then
+            3dsxtool --help || true
+          else
+            echo "ERROR: 3dsxtool was not installed."
+            exit 1
+          fi
+
+          echo ""
+          echo "===== TEX3DS ====="
+
+          if command -v tex3ds; then
+            tex3ds --version || true
+          else
+            echo "ERROR: tex3ds was not installed."
+            exit 1
+          fi
+
+          echo ""
+          echo "======================================"
+          echo "       ALL 3DS TOOLS READY"
+          echo "======================================"
+
+
+      # ============================================================
+      # DOWNLOAD MGBA
+      # ============================================================
 
       - name: Download mGBA 0.10.5
         run: |
@@ -89,13 +369,20 @@ jobs:
             https://github.com/mgba-emu/mgba.git \
             mgba
 
-          echo "===== mGBA 3DS TOOLCHAIN ====="
+          echo "======================================"
+          echo "        MGBA TOOLCHAIN"
+          echo "======================================"
 
           test -f \
             mgba/src/platform/3ds/CMakeToolchain.txt
 
           ls -lh \
             mgba/src/platform/3ds/CMakeToolchain.txt
+
+
+      # ============================================================
+      # CONFIGURE MGBA
+      # ============================================================
 
       - name: Configure mGBA
         run: |
@@ -124,9 +411,16 @@ jobs:
             -DBUILD_PERF=OFF \
             ..
 
-          echo "===== CMAKE CONFIGURATION COMPLETE ====="
+          echo "======================================"
+          echo "     MGBA CMAKE CONFIGURED"
+          echo "======================================"
 
           test -f Makefile
+
+
+      # ============================================================
+      # BUILD MGBA
+      # ============================================================
 
       - name: Build mGBA
         run: |
@@ -135,16 +429,21 @@ jobs:
             --target mgba \
             --parallel 2
 
+
+      # ============================================================
+      # FIND MGBA LIBRARY
+      # ============================================================
+
       - name: Find mGBA library
         run: |
-          echo "===== ALL STATIC LIBRARIES ====="
+          echo "======================================"
+          echo "       SEARCHING FOR LIBMGBA"
+          echo "======================================"
 
           find mgba/build \
             -type f \
             -name "*.a" \
             -print
-
-          echo "===== SEARCHING FOR LIBMGBA ====="
 
           LIB=$(find mgba/build \
             -type f \
@@ -156,15 +455,20 @@ jobs:
             exit 1
           fi
 
+          echo ""
           echo "FOUND:"
           echo "$LIB"
 
-          mkdir -p project/mgba/build-hoenn-3ds
+          mkdir -p \
+            project/mgba/build-hoenn-3ds
 
           cp "$LIB" \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
-          echo "===== STAGED LIBRARY ====="
+          echo ""
+          echo "======================================"
+          echo "       MGBA LIBRARY STAGED"
+          echo "======================================"
 
           ls -lh \
             project/mgba/build-hoenn-3ds/libmgba-static.a
@@ -172,12 +476,22 @@ jobs:
           test -s \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
+
+      # ============================================================
+      # COPY MGBA HEADERS
+      # ============================================================
+
       - name: Copy mGBA headers
         run: |
-          mkdir -p project/mgba/include
-          mkdir -p project/mgba/build-hoenn-3ds/include
+          mkdir -p \
+            project/mgba/include
 
-          echo "===== COPYING PUBLIC HEADERS ====="
+          mkdir -p \
+            project/mgba/build-hoenn-3ds/include
+
+          echo "======================================"
+          echo "        COPYING MGBA HEADERS"
+          echo "======================================"
 
           if [ -d mgba/include ]; then
             cp -R \
@@ -185,19 +499,20 @@ jobs:
               project/mgba/include/
           fi
 
-          echo "===== COPYING GENERATED HEADERS ====="
-
           if [ -d mgba/build/include ]; then
             cp -R \
               mgba/build/include/. \
               project/mgba/build-hoenn-3ds/include/
           fi
 
-          echo "===== PUBLIC HEADERS ====="
-
           find project/mgba/include \
             -type f \
             | head -50
+
+
+      # ============================================================
+      # VERIFY MGBA
+      # ============================================================
 
       - name: Verify mGBA staging
         run: |
@@ -211,27 +526,38 @@ jobs:
           test -d \
             project/mgba/include
 
+          echo ""
           echo "Library:"
 
           ls -lh \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
+          echo ""
           echo "Library size:"
 
           wc -c \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
+          echo ""
           echo "mGBA staging verified successfully."
+
+
+      # ============================================================
+      # PATCH OLD MGBA BUILD RULE
+      # ============================================================
 
       - name: Disable broken bundled mGBA build rule
         working-directory: project
         run: |
-          echo "===== PATCHING PROJECT MAKEFILE ====="
+          echo "======================================"
+          echo "       PATCHING MGBA BUILD RULE"
+          echo "======================================"
 
           python3 <<'PY'
           from pathlib import Path
 
           p = Path("Makefile")
+
           text = p.read_text()
 
           old = """mgba-core:
@@ -243,29 +569,42 @@ jobs:
           \tcmake --build "$(MGBA_BUILD)" --target mgba-static -j
           """
 
-          if old in text:
-              text = text.replace(
-                  old,
-                  """mgba-core:
+          replacement = """mgba-core:
           \t@echo "mGBA was prebuilt by GitHub Actions."
           \t@test -f "$(MGBA_LIB)"
           """
-              )
+
+          if old in text:
+              text = text.replace(old, replacement)
+              print("mGBA build rule successfully patched.")
           else:
-              print("Original mgba-core block was not found.")
-              print("Continuing because the staged library will be verified separately.")
+              print("Original mGBA rule was not found.")
+              print("The existing rule will be inspected below.")
 
           p.write_text(text)
           PY
 
+          echo ""
           echo "===== RESULTING MGBA RULE ====="
 
-          grep -A8 -B2 "^mgba-core:" Makefile || true
+          grep \
+            -A8 \
+            -B2 \
+            "^mgba-core:" \
+            Makefile \
+            || true
+
+
+      # ============================================================
+      # VERIFY PROJECT LIBRARY
+      # ============================================================
 
       - name: Verify Hoenn Reborn mGBA library
         working-directory: project
         run: |
-          echo "===== FINAL LIBRARY CHECK ====="
+          echo "======================================"
+          echo "       FINAL MGBA LIBRARY CHECK"
+          echo "======================================"
 
           test -s \
             mgba/build-hoenn-3ds/libmgba-static.a
@@ -273,24 +612,53 @@ jobs:
           ls -lh \
             mgba/build-hoenn-3ds/libmgba-static.a
 
+
+      # ============================================================
+      # BUILD HOENN REBORN
+      # ============================================================
+
       - name: Build Hoenn Reborn
         working-directory: project
         run: |
+          export PATH="$DEVKITPRO/tools/bin:$DEVKITARM/bin:$PATH"
+
           echo "======================================"
           echo "        BUILDING HOENN REBORN"
           echo "======================================"
 
+          echo ""
+          echo "===== REQUIRED TOOLS ====="
+
+          command -v bannertool
+          command -v makerom
+          command -v 3dsxtool
+          command -v tex3ds
+
+          echo ""
+          echo "===== CLEAN ====="
+
           make clean || true
+
+          echo ""
+          echo "===== VERIFY MGBA ====="
 
           test -s \
             mgba/build-hoenn-3ds/libmgba-static.a
 
+          echo ""
+          echo "===== MAKE ====="
+
           make -j2
+
+
+      # ============================================================
+      # CHECK OUTPUTS
+      # ============================================================
 
       - name: Check build outputs
         run: |
           echo "======================================"
-          echo "        BUILD OUTPUTS"
+          echo "          BUILD OUTPUTS"
           echo "======================================"
 
           find project \
@@ -301,8 +669,17 @@ jobs:
               -name "*.3dsx" \
               -o \
               -name "*.elf" \
+              -o \
+              -name "*.smdh" \
+              -o \
+              -name "*.bnr" \
             \) \
             -print
+
+
+      # ============================================================
+      # VERIFY CIA
+      # ============================================================
 
       - name: Verify CIA
         run: |
@@ -317,10 +694,15 @@ jobs:
           fi
 
           echo "======================================"
-          echo "        CIA SUCCESSFULLY CREATED"
+          echo "       CIA SUCCESSFULLY CREATED"
           echo "======================================"
 
           ls -lh "$CIA"
+
+
+      # ============================================================
+      # UPLOAD CIA
+      # ============================================================
 
       - name: Upload CIA
         uses: actions/upload-artifact@v4
@@ -329,6 +711,11 @@ jobs:
           path: project/**/*.cia
           if-no-files-found: error
 
+
+      # ============================================================
+      # UPLOAD 3DSX
+      # ============================================================
+
       - name: Upload 3DSX
         uses: actions/upload-artifact@v4
         with:
@@ -336,12 +723,22 @@ jobs:
           path: project/**/*.3dsx
           if-no-files-found: warn
 
+
+      # ============================================================
+      # UPLOAD ELF
+      # ============================================================
+
       - name: Upload ELF
         uses: actions/upload-artifact@v4
         with:
           name: Hoenn-Reborn-ELF
           path: project/**/*.elf
           if-no-files-found: warn
+
+
+      # ============================================================
+      # BUILD LOGS IF SOMETHING FAILS
+      # ============================================================
 
       - name: Upload build logs
         if: failure()
