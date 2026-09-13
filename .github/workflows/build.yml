@@ -126,9 +126,9 @@ jobs:
           test -f project/source/gba_core_mgba.c
 
       # ============================================================
-      # 5. BUILD BANNERTOOL
+      # 5. GET BANNERTOOL SOURCE
       # ============================================================
-      - name: Build bannertool
+      - name: Get bannertool source
         shell: bash
         run: |
           set -eux
@@ -136,40 +136,65 @@ jobs:
           rm -rf /tmp/bannertool
 
           echo "========================================"
-          echo "CONFIGURING GIT FOR HTTPS"
-          echo "========================================"
-
-          git config --global \
-            url."https://github.com/".insteadOf \
-            "git://github.com/"
-
-          git config --global \
-            url."https://github.com/".insteadOf \
-            "git@github.com:"
-
-          echo "========================================"
           echo "CLONING BANNERTOOL"
           echo "========================================"
 
           git clone \
             --depth 1 \
-            --recurse-submodules \
-            --shallow-submodules \
             --branch v1.2.2 \
             https://github.com/Epicpkmn11/bannertool.git \
             /tmp/bannertool
 
           cd /tmp/bannertool
 
+          echo "Original .gitmodules:"
+          cat .gitmodules
+
+          echo "========================================"
+          echo "FIXING SUBMODULE URL"
+          echo "========================================"
+
+          if [ -f .gitmodules ]; then
+            sed -i \
+              's#git://github.com/#https://github.com/#g' \
+              .gitmodules
+
+            sed -i \
+              's#git@github.com:#https://github.com/#g' \
+              .gitmodules
+          fi
+
+          echo "Updated .gitmodules:"
+          cat .gitmodules
+
+          echo "========================================"
+          echo "SYNCING SUBMODULES"
+          echo "========================================"
+
+          git submodule sync --recursive
+
+          git submodule update \
+            --init \
+            --recursive \
+            --depth 1
+
           echo "========================================"
           echo "CHECKING BUILDTOOLS"
           echo "========================================"
 
-          git submodule status
-
           test -f buildtools/make_base
 
           echo "buildtools/make_base FOUND"
+
+      # ============================================================
+      # 6. BUILD BANNERTOOL
+      # ============================================================
+      - name: Build bannertool
+        shell: bash
+        run: |
+          set -eux
+
+          cd /tmp/bannertool
 
           echo "========================================"
           echo "BUILDING BANNERTOOL"
@@ -219,7 +244,7 @@ jobs:
           echo "/opt/hoenn-tools" >> "$GITHUB_PATH"
 
       # ============================================================
-      # 6. INSTALL 3DS PACKAGING TOOLS
+      # 7. INSTALL 3DS PACKAGING TOOLS
       # ============================================================
       - name: Install 3DS packaging tools
         shell: bash
@@ -229,7 +254,7 @@ jobs:
           mkdir -p /opt/hoenn-tools
 
           # --------------------------------------------------------
-          # MAKEROM
+          # makerom
           # --------------------------------------------------------
           cd /tmp
 
@@ -250,11 +275,7 @@ jobs:
 
           if [ -z "$MAKEROM_BIN" ]; then
             echo "makerom executable not found."
-
-            find makerom_extract \
-              -type f \
-              | sort
-
+            find makerom_extract -type f | sort
             exit 1
           fi
 
@@ -265,7 +286,7 @@ jobs:
             /opt/hoenn-tools/makerom
 
           # --------------------------------------------------------
-          # 3DSTOOLS
+          # 3dstools
           # --------------------------------------------------------
           wget -O 3dstools.pkg.tar.zst \
             https://wii.leseratte10.de/devkitPro/other-stuff/3dstools/3dstools-1.3.1-3-linux_x86_64.pkg.tar.zst
@@ -279,9 +300,7 @@ jobs:
             -C 3dstools_extract
 
           echo "3dstools contents:"
-          find 3dstools_extract \
-            -type f \
-            | sort
+          find 3dstools_extract -type f | sort
 
           THREE_DS_XTOOL=$(find 3dstools_extract \
             -type f \
@@ -314,7 +333,7 @@ jobs:
             /opt/hoenn-tools/smdhtool
 
           # --------------------------------------------------------
-          # TEX3DS
+          # tex3ds
           # --------------------------------------------------------
           wget -O tex3ds.pkg.tar.zst \
             https://wii.leseratte10.de/devkitPro/other-stuff/tex3ds/tex3ds-2.3.0-4-linux_x86_64.pkg.tar.zst
@@ -344,7 +363,7 @@ jobs:
             /opt/hoenn-tools/tex3ds
 
           # --------------------------------------------------------
-          # VERIFY TOOLS
+          # Verify
           # --------------------------------------------------------
           export PATH="/opt/hoenn-tools:$PATH"
 
@@ -369,7 +388,7 @@ jobs:
           echo "========================================"
 
       # ============================================================
-      # 7. GET mGBA
+      # 8. GET mGBA
       # ============================================================
       - name: Get mGBA source
         shell: bash
@@ -403,7 +422,7 @@ jobs:
             | sort
 
       # ============================================================
-      # 8. BUILD mGBA STATIC LIBRARY
+      # 9. BUILD mGBA
       # ============================================================
       - name: Build mGBA static library
         shell: bash
@@ -462,14 +481,9 @@ jobs:
           echo "Found:"
           echo "$MGBA_LIB"
 
-          mkdir -p \
-            project/mgba/build-hoenn-3ds
-
-          mkdir -p \
-            project/mgba/include
-
-          mkdir -p \
-            project/mgba/src
+          mkdir -p project/mgba/build-hoenn-3ds
+          mkdir -p project/mgba/include
+          mkdir -p project/mgba/src
 
           cp "$MGBA_LIB" \
             project/mgba/build-hoenn-3ds/libmgba-static.a
@@ -490,7 +504,7 @@ jobs:
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
       # ============================================================
-      # 9. PREPARE MAKEFILE
+      # 10. PREPARE MAKEFILE
       # ============================================================
       - name: Prepare Hoenn Reborn Makefile
         shell: bash
@@ -511,7 +525,6 @@ jobs:
           start = s.find("mgba-core:")
 
           if start != -1:
-
               end = s.find("\n3dsx:", start)
 
               if end == -1:
@@ -543,7 +556,7 @@ jobs:
             mgba/build-hoenn-3ds/libmgba-static.a
 
       # ============================================================
-      # 10. BUILD HOENN REBORN
+      # 11. BUILD HOENN REBORN
       # ============================================================
       - name: Build Hoenn Reborn
         shell: bash
@@ -589,7 +602,7 @@ jobs:
             Hoenn_Reborn.bnr
 
       # ============================================================
-      # 11. VERIFY CIA
+      # 12. VERIFY CIA
       # ============================================================
       - name: Verify CIA
         shell: bash
@@ -605,7 +618,7 @@ jobs:
           wc -c Hoenn_Reborn.cia
 
       # ============================================================
-      # 12. VERIFY 3DSX
+      # 13. VERIFY 3DSX
       # ============================================================
       - name: Verify 3DSX
         shell: bash
@@ -621,7 +634,7 @@ jobs:
           wc -c Hoenn_Reborn.3dsx
 
       # ============================================================
-      # 13. UPLOAD CIA
+      # 14. UPLOAD CIA
       # ============================================================
       - name: Upload CIA
         if: success()
@@ -632,10 +645,9 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # 14. UPLOAD 3DSX
+      # 15. UPLOAD 3DSX
       # ============================================================
       - name: Upload 3DSX
-      # ============================================================
         if: success()
         uses: actions/upload-artifact@v4
         with:
@@ -644,7 +656,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # 15. UPLOAD ELF
+      # 16. UPLOAD ELF
       # ============================================================
       - name: Upload ELF
         if: success()
@@ -655,7 +667,7 @@ jobs:
           if-no-files-found: error
 
       # ============================================================
-      # 16. UPLOAD BUILD LOGS
+      # 17. UPLOAD BUILD LOGS
       # ============================================================
       - name: Upload build logs
         if: always()
