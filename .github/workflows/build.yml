@@ -14,14 +14,29 @@ jobs:
       image: devkitpro/devkitarm
 
     steps:
+
+      # ---------------------------------------------------------
+      # 1. Get the GitHub repository
+      # ---------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
+
+      # ---------------------------------------------------------
+      # 2. Extract the Hoenn Reborn project ZIP
+      # ---------------------------------------------------------
       - name: Extract Hoenn Reborn project
         run: |
           mkdir -p project
           unzip -o Hoenn_Reborn_GitHub_Build.zip -d project
 
+          echo "===== PROJECT CONTENTS ====="
+          find project -maxdepth 3 -type f | sort
+
+
+      # ---------------------------------------------------------
+      # 3. Install Nintendo 3DS development libraries
+      # ---------------------------------------------------------
       - name: Install 3DS development libraries
         run: |
           dkp-pacman -Syu --noconfirm
@@ -29,6 +44,10 @@ jobs:
             3ds-dev \
             3ds-cmake
 
+
+      # ---------------------------------------------------------
+      # 4. Download mGBA 0.10.5
+      # ---------------------------------------------------------
       - name: Download mGBA 0.10.5
         run: |
           git clone \
@@ -37,16 +56,28 @@ jobs:
             https://github.com/mgba-emu/mgba.git \
             mgba
 
+          echo "===== mGBA 3DS TOOLCHAIN ====="
+
+          ls -l \
+            mgba/src/platform/3ds/CMakeToolchain.txt
+
+          test -f \
+            mgba/src/platform/3ds/CMakeToolchain.txt
+
+
+      # ---------------------------------------------------------
+      # 5. Configure mGBA for Nintendo 3DS
+      # ---------------------------------------------------------
       - name: Configure mGBA
         run: |
+          rm -rf mgba/build
           mkdir -p mgba/build
 
+          cd mgba/build
+
           cmake \
-            -S mgba \
-            -B mgba/build \
-            -DCMAKE_TOOLCHAIN_FILE=mgba/src/platform/3ds/CMakeToolchain.txt \
+            -DCMAKE_TOOLCHAIN_FILE=../src/platform/3ds/CMakeToolchain.txt \
             -DCMAKE_BUILD_TYPE=Release \
-            -D3DS=ON \
             -DLIBMGBA_ONLY=ON \
             -DBUILD_STATIC=ON \
             -DBUILD_SHARED=OFF \
@@ -54,15 +85,23 @@ jobs:
             -DM_CORE_GBA=ON \
             -DM_CORE_GB=OFF \
             -DDISABLE_DEPS=ON \
-            -DBUILD_LTO=OFF \
             -DUSE_PNG=OFF \
             -DUSE_ZLIB=OFF \
             -DENABLE_SCRIPTING=OFF \
             -DBUILD_TEST=OFF \
             -DBUILD_SUITE=OFF \
             -DBUILD_EXAMPLE=OFF \
-            -DBUILD_PERF=OFF
+            -DBUILD_PERF=OFF \
+            ..
 
+          echo "===== CMAKE CONFIGURATION COMPLETE ====="
+
+          test -f Makefile
+
+
+      # ---------------------------------------------------------
+      # 6. Build the mGBA core
+      # ---------------------------------------------------------
       - name: Build mGBA core
         run: |
           cmake \
@@ -70,81 +109,107 @@ jobs:
             --target mgba \
             --parallel 2
 
+
+      # ---------------------------------------------------------
+      # 7. Find and prepare the mGBA static library
+      # ---------------------------------------------------------
       - name: Prepare mGBA for Hoenn Reborn
         run: |
-          echo "===== Searching for mGBA libraries ====="
+          echo "===== SEARCHING FOR mGBA LIBRARY ====="
 
           find mgba/build \
             -type f \
-            \( -name "libmgba*.a" -o -name "libmgba*.so" \) \
+            -name "libmgba*.a" \
             -print
 
-          echo "===== Searching for generated headers ====="
-
-          find mgba/build/include \
+          LIB=$(find mgba/build \
             -type f \
-            -print 2>/dev/null || true
-
-          mkdir -p \
-            project/mgba/build-hoenn-3ds \
-            project/mgba/build-hoenn-3ds/include
-
-          LIB=""
-
-          if [ -f mgba/build/libmgba.a ]; then
-            LIB="mgba/build/libmgba.a"
-          fi
+            -name "libmgba.a" \
+            | head -n 1)
 
           if [ -z "$LIB" ]; then
-            LIB=$(find mgba/build \
-              -type f \
-              -name "libmgba.a" \
-              | head -n 1)
-          fi
-
-          if [ -z "$LIB" ]; then
-            echo "ERROR: Could not find libmgba.a"
+            echo "ERROR: libmgba.a was not found."
             exit 1
           fi
 
-          echo "Using mGBA library:"
+          echo "Found mGBA library:"
           echo "$LIB"
+
+          mkdir -p \
+            project/mgba/build-hoenn-3ds
 
           cp "$LIB" \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
-          if [ -d mgba/build/include ]; then
-            cp -R mgba/build/include/. \
-              project/mgba/build-hoenn-3ds/include/
-          fi
+          echo "===== mGBA LIBRARY READY ====="
 
-          echo "===== Prepared library ====="
           ls -lh \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
-      - name: Verify project files
-        run: |
-          echo "===== Hoenn Reborn project ====="
 
-          find project \
+      # ---------------------------------------------------------
+      # 8. Prepare mGBA headers
+      # ---------------------------------------------------------
+      - name: Prepare mGBA headers
+        run: |
+          mkdir -p \
+            project/mgba/build-hoenn-3ds/include
+
+          if [ -d mgba/include/mgba ]; then
+            cp -R \
+              mgba/include/mgba \
+              project/mgba/build-hoenn-3ds/include/
+          fi
+
+          if [ -d mgba/include/mgba-util ]; then
+            cp -R \
+              mgba/include/mgba-util \
+              project/mgba/build-hoenn-3ds/include/
+          fi
+
+          if [ -d mgba/build/include ]; then
+            cp -R \
+              mgba/build/include/. \
+              project/mgba/build-hoenn-3ds/include/
+          fi
+
+
+      # ---------------------------------------------------------
+      # 9. Verify the library before building Hoenn Reborn
+      # ---------------------------------------------------------
+      - name: Verify mGBA
+        run: |
+          echo "===== mGBA LIBRARY ====="
+
+          ls -lh \
+            project/mgba/build-hoenn-3ds/libmgba-static.a
+
+          echo "===== mGBA DIRECTORY ====="
+
+          find project/mgba \
             -maxdepth 3 \
             -type f \
             | sort
 
-          echo "===== mGBA library ====="
 
-          ls -lh \
-            project/mgba/build-hoenn-3ds/libmgba-static.a
-
+      # ---------------------------------------------------------
+      # 10. Build Hoenn Reborn
+      # ---------------------------------------------------------
       - name: Build Hoenn Reborn
         working-directory: project
         run: |
           make clean || true
           make -j2
 
+
+      # ---------------------------------------------------------
+      # 11. Check generated files
+      # ---------------------------------------------------------
       - name: Check build outputs
         run: |
-          echo "===== BUILD OUTPUTS ====="
+          echo "======================================"
+          echo "        HOENN REBORN OUTPUTS"
+          echo "======================================"
 
           find project \
             -type f \
@@ -155,6 +220,10 @@ jobs:
             \) \
             -print
 
+
+      # ---------------------------------------------------------
+      # 12. Upload CIA
+      # ---------------------------------------------------------
       - name: Upload CIA
         uses: actions/upload-artifact@v4
         with:
@@ -163,6 +232,10 @@ jobs:
             project/**/*.cia
           if-no-files-found: error
 
+
+      # ---------------------------------------------------------
+      # 13. Upload 3DSX
+      # ---------------------------------------------------------
       - name: Upload 3DSX
         uses: actions/upload-artifact@v4
         with:
@@ -171,6 +244,10 @@ jobs:
             project/**/*.3dsx
           if-no-files-found: warn
 
+
+      # ---------------------------------------------------------
+      # 14. Upload ELF
+      # ---------------------------------------------------------
       - name: Upload ELF
         uses: actions/upload-artifact@v4
         with:
@@ -179,6 +256,10 @@ jobs:
             project/**/*.elf
           if-no-files-found: warn
 
+
+      # ---------------------------------------------------------
+      # 15. Save logs if anything fails
+      # ---------------------------------------------------------
       - name: Upload build logs
         if: failure()
         uses: actions/upload-artifact@v4
