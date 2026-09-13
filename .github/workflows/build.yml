@@ -154,8 +154,6 @@ jobs:
             -type f \
             | sort
 
-          # IMPORTANT:
-          # Explicitly select the 64-bit Linux executable.
           BANNERTOOL_BIN=$(find bannertool_extract \
             -type f \
             -path "*/linux-x86_64/bannertool" \
@@ -192,7 +190,6 @@ jobs:
           command -v bannertool
           test -x /opt/hoenn-tools/bannertool
 
-          echo "Bannertool executable:"
           ls -lh /opt/hoenn-tools/bannertool
 
           echo "========================================"
@@ -299,8 +296,6 @@ jobs:
           chmod +x \
             /opt/hoenn-tools/3dsxtool \
             /opt/hoenn-tools/smdhtool
-
-          echo "3dstools installed."
 
           # --------------------------------------------------------
           # TEX3DS
@@ -473,27 +468,47 @@ jobs:
 
           start = s.find("mgba-core:")
 
-          if start != -1:
+          if start == -1:
+              raise SystemExit("Could not find mgba-core target")
 
-              end = s.find("\n3dsx:", start)
+          # Find the next Make target.
+          rest = s[start + len("mgba-core:"):]
 
-              if end == -1:
-                  end = s.find("\n$(TARGET).elf:", start)
+          next_target = None
 
-              if end == -1:
-                  raise SystemExit(
-                      "Could not find end of mgba-core section"
-                  )
+          for marker in [
+              "\n3dsx:",
+              "\n$(TARGET).elf:",
+              "\ncia:",
+              "\nclean:"
+          ]:
+              pos = rest.find(marker)
+              if pos != -1:
+                  if next_target is None or pos < next_target:
+                      next_target = pos
 
-              replacement = """mgba-core:
-          @test -f "$(MGBA_LIB)"
-          @echo "Using prebuilt mGBA: $(MGBA_LIB)"
+          if next_target is None:
+              raise SystemExit("Could not find next Makefile target")
 
-          """
+          end = start + len("mgba-core:") + next_target
 
-              s = s[:start] + replacement + s[end + 1:]
+          # IMPORTANT:
+          # chr(9) creates a REAL TAB character.
+          TAB = chr(9)
+
+          replacement = (
+              "mgba-core:\n"
+              + TAB + '@test -f "$(MGBA_LIB)"\n'
+              + TAB + '@echo "Using prebuilt mGBA: $(MGBA_LIB)"\n'
+              + "\n"
+          )
+
+          s = s[:start] + replacement + s[end:]
 
           p.write_text(s)
+
+          print("Makefile patched successfully.")
+          print("Using real TAB characters for Make recipes.")
           PY
 
           echo "========================================"
@@ -502,6 +517,12 @@ jobs:
 
           test -f \
             mgba/build-hoenn-3ds/libmgba-static.a
+
+          echo "Checking Makefile syntax..."
+
+          make -n mgba-core
+
+          echo "Makefile syntax OK."
 
       # ============================================================
       # 10. BUILD HOENN REBORN
