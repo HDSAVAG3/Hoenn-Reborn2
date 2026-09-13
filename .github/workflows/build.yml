@@ -20,55 +20,18 @@ jobs:
 
       - name: Initialize devkitPro environment
         run: |
-          echo "===== DEVKITPRO ====="
-          echo "$DEVKITPRO"
-
-          echo "===== DEVKITARM ====="
-          echo "$DEVKITARM"
-
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
-
-          echo "PATH=$PATH"
-
-          echo "===== ARM GCC ====="
-          "$DEVKITARM/bin/arm-none-eabi-gcc" --version
-
-          echo "===== ARM G++ ====="
-          "$DEVKITARM/bin/arm-none-eabi-g++" --version
-
-          echo "===== 3DS TOOLS ====="
-          which makerom || true
-          which bannertool || true
-          which 3dsxtool || true
-          which tex3ds || true
-
-          echo "DEVKITPRO=$DEVKITPRO" >> "$GITHUB_ENV"
-          echo "DEVKITARM=$DEVKITARM" >> "$GITHUB_ENV"
-          echo "PATH=$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH" >> "$GITHUB_ENV"
-
-      - name: Verify devkitPro environment
-        run: |
-          echo "===== ENVIRONMENT ====="
 
           echo "DEVKITPRO=$DEVKITPRO"
           echo "DEVKITARM=$DEVKITARM"
 
+          echo "$DEVKITARM/bin" >> "$GITHUB_PATH"
+          echo "$DEVKITPRO/tools/bin" >> "$GITHUB_PATH"
+
           echo "===== GCC ====="
-
-          command -v arm-none-eabi-gcc
-          arm-none-eabi-gcc --version
-
-          echo "===== G++ ====="
-
-          command -v arm-none-eabi-g++
-          arm-none-eabi-g++ --version
-
-          echo "===== AR ====="
-
-          command -v arm-none-eabi-ar
+          "$DEVKITARM/bin/arm-none-eabi-gcc" --version
 
           echo "===== 3DS TOOLS ====="
-
           command -v makerom || true
           command -v bannertool || true
           command -v 3dsxtool || true
@@ -76,16 +39,13 @@ jobs:
 
       - name: Extract Hoenn Reborn project
         run: |
+          rm -rf project
           mkdir -p project
 
           unzip -o Hoenn_Reborn_GitHub_Build.zip -d project
 
-          echo "===== PROJECT CONTENTS ====="
-
-          find project \
-            -maxdepth 3 \
-            -type f \
-            | sort
+          echo "===== PROJECT ====="
+          find project -maxdepth 3 -type f | sort
 
       - name: Download mGBA 0.10.5
         run: |
@@ -97,18 +57,13 @@ jobs:
             https://github.com/mgba-emu/mgba.git \
             mgba
 
-          echo "===== mGBA 3DS TOOLCHAIN ====="
+          test -f mgba/src/platform/3ds/CMakeToolchain.txt
 
-          test -f \
-            mgba/src/platform/3ds/CMakeToolchain.txt
-
-          ls -lh \
-            mgba/src/platform/3ds/CMakeToolchain.txt
+          echo "mGBA 0.10.5 downloaded successfully."
 
       - name: Configure mGBA
         run: |
           rm -rf mgba/build
-
           mkdir -p mgba/build
 
           cd mgba/build
@@ -132,25 +87,23 @@ jobs:
             -DBUILD_PERF=OFF \
             ..
 
-          echo "===== CMAKE CONFIGURATION COMPLETE ====="
-
-          test -f Makefile
-
-      - name: Build mGBA core
+      - name: Build mGBA
         run: |
           cmake \
             --build mgba/build \
             --target mgba \
             --parallel 2
 
-      - name: Locate mGBA library
+      - name: Find mGBA library
         run: |
-          echo "===== SEARCHING FOR LIBMGBA ====="
+          echo "===== ALL STATIC LIBRARIES ====="
 
           find mgba/build \
             -type f \
-            -name "libmgba*.a" \
+            -name "*.a" \
             -print
+
+          echo "===== SEARCHING FOR LIBMGBA ====="
 
           LIB=$(find mgba/build \
             -type f \
@@ -158,21 +111,16 @@ jobs:
             | head -n 1)
 
           if [ -z "$LIB" ]; then
-            echo "ERROR: libmgba.a was not found."
+            echo "ERROR: libmgba.a was not produced."
             exit 1
           fi
 
-          echo "Found:"
+          echo "FOUND:"
           echo "$LIB"
 
-          echo "MGBA_LIB=$LIB" >> "$GITHUB_ENV"
+          mkdir -p project/mgba/build-hoenn-3ds
 
-      - name: Prepare mGBA for Hoenn Reborn
-        run: |
-          mkdir -p \
-            project/mgba/build-hoenn-3ds
-
-          cp "$MGBA_LIB" \
+          cp "$LIB" \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
           echo "===== STAGED LIBRARY ====="
@@ -180,12 +128,13 @@ jobs:
           ls -lh \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
-      - name: Prepare mGBA headers
+          test -s \
+            project/mgba/build-hoenn-3ds/libmgba-static.a
+
+      - name: Copy mGBA headers
         run: |
           mkdir -p project/mgba/include
           mkdir -p project/mgba/build-hoenn-3ds/include
-
-          echo "===== COPYING PUBLIC HEADERS ====="
 
           if [ -d mgba/include ]; then
             cp -R \
@@ -193,43 +142,87 @@ jobs:
               project/mgba/include/
           fi
 
-          echo "===== COPYING GENERATED HEADERS ====="
-
           if [ -d mgba/build/include ]; then
             cp -R \
               mgba/build/include/. \
               project/mgba/build-hoenn-3ds/include/
           fi
 
-          echo "===== HEADER TREE ====="
+          echo "===== PUBLIC HEADERS ====="
 
-          find project/mgba \
-            -maxdepth 4 \
+          find project/mgba/include \
             -type f \
-            | sort
+            | head -50
 
-      - name: Verify mGBA
+      - name: Verify mGBA staging
         run: |
           echo "======================================"
-          echo "        MGBA VERIFICATION"
+          echo "        MGBA STAGING CHECK"
           echo "======================================"
 
-          test -f \
+          test -s \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
           test -d \
             project/mgba/include
 
           echo "Library:"
-
           ls -lh \
             project/mgba/build-hoenn-3ds/libmgba-static.a
 
-          echo "Headers:"
+          echo "Library file type:"
+          file \
+            project/mgba/build-hoenn-3ds/libmgba-static.a
 
-          find project/mgba/include \
-            -type f \
-            | head -50
+      - name: Disable broken bundled mGBA build rule
+        working-directory: project
+        run: |
+          echo "===== PATCHING PROJECT MAKEFILE ====="
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          p = Path("Makefile")
+          text = p.read_text()
+
+          old = """mgba-core:
+          \t@mkdir -p "$(MGBA_BUILD)"
+          \tcmake -S "$(MGBA_DIR)" -B "$(MGBA_BUILD)" \\
+          \t\t-DCMAKE_TOOLCHAIN_FILE="$(MGBA_DIR)/src/platform/3ds/CMakeToolchain.txt" \\
+          \t\t-D3DS=ON -DLIBMGBA_ONLY=ON -DBUILD_STATIC=ON -DBUILD_SHARED=OFF \\
+          \t\t-DM_CORE_GBA=ON -DM_CORE_GB=OFF -DDISABLE_DEPS=ON -DBUILD_LTO=OFF
+          \tcmake --build "$(MGBA_BUILD)" --target mgba-static -j
+          """
+
+          if old in text:
+              text = text.replace(
+                  old,
+                  """mgba-core:
+          \t@echo "mGBA was prebuilt by GitHub Actions."
+          \t@test -f "$(MGBA_LIB)"
+          """
+              )
+          else:
+              print("Original mgba-core block was not found.")
+              print("Continuing because the staged library will be verified separately.")
+
+          p.write_text(text)
+          PY
+
+          echo "===== RESULTING MGBA RULE ====="
+
+          grep -A8 -B2 "^mgba-core:" Makefile || true
+
+      - name: Verify Hoenn Reborn mGBA library
+        working-directory: project
+        run: |
+          echo "===== FINAL LIBRARY CHECK ====="
+
+          test -s \
+            mgba/build-hoenn-3ds/libmgba-static.a
+
+          ls -lh \
+            mgba/build-hoenn-3ds/libmgba-static.a
 
       - name: Build Hoenn Reborn
         working-directory: project
@@ -240,12 +233,18 @@ jobs:
 
           make clean || true
 
+          # make clean does not remove the staged mGBA library,
+          # but verify it again before compilation.
+
+          test -s \
+            mgba/build-hoenn-3ds/libmgba-static.a
+
           make -j2
 
       - name: Check build outputs
         run: |
           echo "======================================"
-          echo "        HOENN REBORN OUTPUTS"
+          echo "        BUILD OUTPUTS"
           echo "======================================"
 
           find project \
@@ -257,7 +256,7 @@ jobs:
             \) \
             -print
 
-      - name: Verify CIA exists
+      - name: Verify CIA
         run: |
           CIA=$(find project \
             -type f \
@@ -265,12 +264,12 @@ jobs:
             | head -n 1)
 
           if [ -z "$CIA" ]; then
-            echo "ERROR: CIA was not created."
+            echo "ERROR: No CIA was created."
             exit 1
           fi
 
           echo "======================================"
-          echo "CIA BUILD SUCCESSFUL"
+          echo "        CIA SUCCESSFULLY CREATED"
           echo "======================================"
 
           ls -lh "$CIA"
