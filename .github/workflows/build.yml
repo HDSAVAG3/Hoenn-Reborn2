@@ -22,16 +22,12 @@ jobs:
           mkdir -p project
           unzip -o Hoenn_Reborn_GitHub_Build.zip -d project
 
-      - name: Install build tools
+      - name: Install 3DS development libraries
         run: |
           dkp-pacman -Syu --noconfirm
           dkp-pacman -S --needed --noconfirm \
             3ds-dev \
-            3ds-cmake \
-            3ds-tools \
-            git \
-            cmake \
-            make
+            3ds-cmake
 
       - name: Download mGBA 0.10.5
         run: |
@@ -73,7 +69,7 @@ jobs:
       - name: Build mGBA core
         run: |
           cmake --build mgba/build \
-            --target mgba \
+            --target mgba-static \
             --parallel 2
 
       - name: Prepare mGBA headers and library
@@ -84,11 +80,10 @@ jobs:
           cp -R mgba/include/mgba \
             project/vendor/mgba/include/
 
-          cp -R mgba/include/mgba-util \
-            project/vendor/mgba/include/
-
-          cp -R mgba/build/include/mgba \
-            project/vendor/mgba/include/ 2>/dev/null || true
+          if [ -d mgba/include/mgba-util ]; then
+            cp -R mgba/include/mgba-util \
+              project/vendor/mgba/include/
+          fi
 
           cp mgba/build/libmgba.a \
             project/vendor/mgba/lib/libmgba.a
