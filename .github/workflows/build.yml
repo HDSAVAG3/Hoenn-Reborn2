@@ -16,7 +16,7 @@ jobs:
     steps:
 
       # ============================================================
-      # CHECKOUT
+      # CHECKOUT REPOSITORY
       # ============================================================
 
       - name: Checkout repository
@@ -24,7 +24,7 @@ jobs:
 
 
       # ============================================================
-      # LINUX BUILD TOOLS
+      # INSTALL LINUX BUILD TOOLS
       # ============================================================
 
       - name: Install Linux build tools
@@ -45,7 +45,7 @@ jobs:
 
 
       # ============================================================
-      # DEVKITPRO ENVIRONMENT
+      # CONFIGURE DEVKITPRO
       # ============================================================
 
       - name: Configure devkitPro environment
@@ -66,7 +66,67 @@ jobs:
 
 
       # ============================================================
-      # INSTALL 3DS CMAKE
+      # EXTRACT HOENN REBORN PROJECT ZIP
+      # ============================================================
+
+      - name: Extract Hoenn Reborn project
+        shell: bash
+        run: |
+          set -e
+
+          echo "======================================"
+          echo "SEARCHING FOR HOENN REBORN ZIP"
+          echo "======================================"
+
+          ZIP_FILE="$(
+            find "$GITHUB_WORKSPACE" \
+              -maxdepth 3 \
+              -type f \
+              -name 'Hoenn_Reborn_GitHub_Build.zip' \
+              -print \
+              -quit
+          )"
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: Hoenn_Reborn_GitHub_Build.zip was not found."
+
+            echo ""
+            echo "Repository files:"
+            find "$GITHUB_WORKSPACE" \
+              -maxdepth 4 \
+              -type f \
+              -print
+
+            exit 1
+          fi
+
+          echo "Found ZIP:"
+          echo "$ZIP_FILE"
+
+          PROJECT_DIR="$GITHUB_WORKSPACE/hoenn_project"
+
+          rm -rf "$PROJECT_DIR"
+
+          mkdir -p "$PROJECT_DIR"
+
+          echo "======================================"
+          echo "EXTRACTING PROJECT"
+          echo "======================================"
+
+          unzip -q "$ZIP_FILE" -d "$PROJECT_DIR"
+
+          echo "Extraction complete."
+
+          echo ""
+          echo "Extracted files:"
+          find "$PROJECT_DIR" \
+            -maxdepth 4 \
+            -type f \
+            -print
+
+
+      # ============================================================
+      # INSTALL 3DS CMAKE + CATNIP
       # ============================================================
 
       - name: Install devkitPro CMake helpers
@@ -76,12 +136,15 @@ jobs:
 
           cd /tmp
 
-          echo "Downloading 3DS CMake..."
+          echo "======================================"
+          echo "DOWNLOADING 3DS CMAKE"
+          echo "======================================"
 
           wget -O 3ds-cmake.pkg.tar.zst \
             https://wii.leseratte10.de/devkitPro/cmake/3ds-cmake-1.5.2-1-any.pkg.tar.zst
 
           rm -rf /tmp/3ds-cmake
+
           mkdir -p /tmp/3ds-cmake
 
           tar \
@@ -89,18 +152,19 @@ jobs:
             -xf 3ds-cmake.pkg.tar.zst \
             -C /tmp/3ds-cmake
 
-          echo "Installing 3DS CMake files..."
-
           cp -a \
             /tmp/3ds-cmake/opt/devkitpro/. \
             /opt/devkitpro/
 
-          echo "Downloading Catnip..."
+          echo "======================================"
+          echo "DOWNLOADING CATNIP"
+          echo "======================================"
 
           wget -O catnip.pkg.tar.zst \
             https://wii.leseratte10.de/devkitPro/other-stuff/catnip-0.2.0-1-any.pkg.tar.zst
 
           rm -rf /tmp/catnip
+
           mkdir -p /tmp/catnip
 
           tar \
@@ -108,29 +172,13 @@ jobs:
             -xf catnip.pkg.tar.zst \
             -C /tmp/catnip
 
-          echo "Installing Catnip..."
-
           cp -a \
             /tmp/catnip/opt/devkitpro/. \
             /opt/devkitpro/
 
-          echo "Searching installed files..."
-
-          find /opt/devkitpro \
-            -type f \
-            \( \
-              -name 'arm-none-eabi-cmake' \
-              -o \
-              -name '3DS.cmake' \
-              -o \
-              -name 'catnip' \
-              -o \
-              -name '*catnip*' \
-            \) \
-            -print \
-            2>/dev/null || true
-
-          echo "devkitPro CMake/Catnip installation complete."
+          echo "======================================"
+          echo "CMAKE/CATNIP INSTALLATION COMPLETE"
+          echo "======================================"
 
 
       # ============================================================
@@ -148,8 +196,6 @@ jobs:
           export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
           export PATH="/opt/devkitpro/tools/bin:$PATH"
           export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
-
-          echo "Searching for arm-none-eabi-cmake..."
 
           CMAKE3DS="$(
             find /opt/devkitpro \
@@ -190,8 +236,6 @@ jobs:
           export PATH="/opt/devkitpro/tools/bin:$PATH"
           export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
 
-          echo "Searching for Catnip..."
-
           CATNIP_BIN="$(
             find /opt/devkitpro \
               -type f \
@@ -230,6 +274,7 @@ jobs:
             https://wii.leseratte10.de/devkitPro/other-stuff/3dstools/3dstools-1.3.1-3-linux_x86_64.pkg.tar.zst
 
           rm -rf /tmp/3dstools
+
           mkdir -p /tmp/3dstools
 
           tar \
@@ -277,6 +322,7 @@ jobs:
             https://github.com/Epicpkmn11/bannertool/releases/download/v1.2.2/bannertool.zip
 
           rm -rf /tmp/bannertool
+
           mkdir -p /tmp/bannertool
 
           unzip -q bannertool.zip -d /tmp/bannertool
@@ -312,6 +358,7 @@ jobs:
             https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip
 
           rm -rf /tmp/makerom
+
           mkdir -p /tmp/makerom
 
           unzip -q makerom.zip -d /tmp/makerom
@@ -339,7 +386,7 @@ jobs:
 
 
       # ============================================================
-      # VERIFY ALL 3DS TOOLS
+      # VERIFY TOOLS
       # ============================================================
 
       - name: Verify 3DS tools
@@ -354,48 +401,34 @@ jobs:
           export PATH="/opt/devkitpro/tools/bin:$PATH"
           export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
 
-          echo "======================================"
-          echo "ARM COMPILER"
-          echo "======================================"
-
+          echo "ARM compiler:"
           command -v arm-none-eabi-gcc
 
-          echo "======================================"
-          echo "3DS CMAKE"
-          echo "======================================"
-
+          echo ""
+          echo "3DS CMake:"
           command -v arm-none-eabi-cmake
 
-          echo "======================================"
-          echo "CATNIP"
-          echo "======================================"
-
+          echo ""
+          echo "Catnip:"
           command -v catnip
 
-          echo "======================================"
-          echo "BANNERTOOL"
-          echo "======================================"
-
+          echo ""
+          echo "bannertool:"
           command -v bannertool
 
-          echo "======================================"
-          echo "MAKEROM"
-          echo "======================================"
-
+          echo ""
+          echo "makerom:"
           command -v makerom
 
-          echo "======================================"
-          echo "TEX3DS"
-          echo "======================================"
-
+          echo ""
+          echo "tex3ds:"
           command -v tex3ds
 
-          echo "======================================"
-          echo "3DSXTOOL"
-          echo "======================================"
-
+          echo ""
+          echo "3dsxtool:"
           command -v 3dsxtool
 
+          echo ""
           echo "======================================"
           echo "ALL REQUIRED TOOLS ARE AVAILABLE"
           echo "======================================"
@@ -413,6 +446,7 @@ jobs:
           cd /tmp
 
           rm -rf /tmp/libctru
+
           mkdir -p /tmp/libctru
 
           wget -O libctru.tar.gz \
@@ -432,6 +466,7 @@ jobs:
           )"
 
           test -n "$LIBCTRU_ROOT"
+
           test -f "$LIBCTRU_ROOT/Makefile"
 
           GDBHIO_FILE="$(
@@ -444,9 +479,7 @@ jobs:
 
           test -n "$GDBHIO_FILE"
 
-          echo "======================================"
-          echo "PATCHING LIBCTRU"
-          echo "======================================"
+          echo "Patching gdbMode..."
 
           python3 - "$GDBHIO_FILE" <<'PY'
           from pathlib import Path
@@ -477,31 +510,19 @@ jobs:
 
               p.write_text(text)
 
-              print("gdbMode declaration patched successfully.")
+              print("gdbMode patched.")
 
           elif (
               "__attribute__((unused))" in text
               and "gdbMode" in text
           ):
-              print("gdbMode was already patched.")
+              print("gdbMode already patched.")
 
           else:
               raise SystemExit(
                   "ERROR: gdbMode declaration not found."
               )
           PY
-
-          grep -n \
-            "gdbhio_mode_t gdbMode" \
-            "$GDBHIO_FILE"
-
-          grep -q \
-            "gdbMode __attribute__((unused))" \
-            "$GDBHIO_FILE"
-
-          echo "======================================"
-          echo "BUILDING LIBCTRU"
-          echo "======================================"
 
           cd "$LIBCTRU_ROOT"
 
@@ -530,6 +551,7 @@ jobs:
           cd /tmp
 
           rm -rf /tmp/citro3d
+
           mkdir -p /tmp/citro3d
 
           wget -O citro3d.tar.gz \
@@ -542,10 +564,6 @@ jobs:
           CITRO3D_ROOT="/tmp/citro3d/citro3d-1.7.1"
 
           test -f "$CITRO3D_ROOT/Makefile"
-
-          echo "======================================"
-          echo "BUILDING CITRO3D"
-          echo "======================================"
 
           cd "$CITRO3D_ROOT"
 
@@ -574,11 +592,10 @@ jobs:
           cd /tmp
 
           rm -rf /tmp/citro2d
+
           mkdir -p /tmp/citro2d
 
-          echo "======================================"
-          echo "DOWNLOADING CITRO2D 1.7.0"
-          echo "======================================"
+          echo "Downloading citro2d 1.7.0..."
 
           wget -O citro2d.tar.gz \
             https://github.com/devkitPro/citro2d/archive/refs/tags/v1.7.0.tar.gz
@@ -590,28 +607,8 @@ jobs:
           CITRO2D_ROOT="/tmp/citro2d/citro2d-1.7.0"
 
           test -f "$CITRO2D_ROOT/CMakeLists.txt"
+
           test -f "$CITRO2D_ROOT/Catnip.cmake"
-
-          echo "======================================"
-          echo "CITRO2D FILES FOUND"
-          echo "======================================"
-
-          ls -lh "$CITRO2D_ROOT/CMakeLists.txt"
-          ls -lh "$CITRO2D_ROOT/Catnip.cmake"
-
-          echo "======================================"
-          echo "CHECKING CATNIP"
-          echo "======================================"
-
-          command -v catnip
-
-          catnip --version || true
-
-          echo "======================================"
-          echo "CHECKING 3DS CMAKE"
-          echo "======================================"
-
-          command -v arm-none-eabi-cmake
 
           echo "======================================"
           echo "BUILDING CITRO2D WITH CATNIP"
@@ -624,7 +621,7 @@ jobs:
             build
 
           echo "======================================"
-          echo "INSTALLING CITRO2D WITH CATNIP"
+          echo "INSTALLING CITRO2D"
           echo "======================================"
 
           catnip \
@@ -645,33 +642,22 @@ jobs:
         run: |
           set -e
 
-          echo "======================================"
-          echo "LIBCTRU"
-          echo "======================================"
-
+          echo "libctru:"
           find /opt/devkitpro \
             -name libctru.a \
             -print
 
-          echo "======================================"
-          echo "LIBCITRO3D"
-          echo "======================================"
-
+          echo ""
+          echo "libcitro3d:"
           find /opt/devkitpro \
             -name libcitro3d.a \
             -print
 
-          echo "======================================"
-          echo "LIBCITRO2D"
-          echo "======================================"
-
+          echo ""
+          echo "libcitro2d:"
           find /opt/devkitpro \
             -name libcitro2d.a \
             -print
-
-          echo "======================================"
-          echo "CHECKING EXPECTED FILES"
-          echo "======================================"
 
           test -f \
             /opt/devkitpro/libctru/lib/libctru.a
@@ -682,16 +668,14 @@ jobs:
           test -f \
             /opt/devkitpro/libctru/lib/libcitro2d.a
 
+          echo ""
           echo "======================================"
           echo "ALL 3DS LIBRARIES FOUND"
           echo "======================================"
 
 
       # ============================================================
-      # LOCATE HOENN REBORN PROJECT
-      #
-      # The repository contains the project in a nested directory.
-      # We locate it automatically by finding source/main.c.
+      # LOCATE EXTRACTED HOENN REBORN PROJECT
       # ============================================================
 
       - name: Locate Hoenn Reborn project
@@ -699,12 +683,17 @@ jobs:
         run: |
           set -e
 
+          SEARCH_ROOT="$GITHUB_WORKSPACE/hoenn_project"
+
           echo "======================================"
-          echo "SEARCHING FOR HOENN REBORN PROJECT"
+          echo "SEARCHING EXTRACTED PROJECT"
           echo "======================================"
 
+          echo "Search location:"
+          echo "$SEARCH_ROOT"
+
           MAIN_FILE="$(
-            find "$GITHUB_WORKSPACE" \
+            find "$SEARCH_ROOT" \
               -type f \
               -path '*/source/main.c' \
               -print \
@@ -712,23 +701,27 @@ jobs:
           )"
 
           if [ -z "$MAIN_FILE" ]; then
-            echo "ERROR: source/main.c was not found."
             echo ""
-            echo "Repository contents:"
-            find "$GITHUB_WORKSPACE" \
-              -maxdepth 4 \
+            echo "ERROR: source/main.c was not found."
+
+            echo ""
+            echo "Extracted project contents:"
+            find "$SEARCH_ROOT" \
+              -maxdepth 6 \
               -type f \
               -print
+
             exit 1
           fi
 
           PROJECT_ROOT="$(dirname "$(dirname "$MAIN_FILE")")"
 
+          echo ""
           echo "Found source/main.c:"
           echo "$MAIN_FILE"
 
           echo ""
-          echo "Hoenn Reborn project root:"
+          echo "Project root:"
           echo "$PROJECT_ROOT"
 
           test -f "$PROJECT_ROOT/Makefile"
@@ -736,13 +729,14 @@ jobs:
 
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
 
+          echo ""
           echo "======================================"
           echo "HOENN REBORN PROJECT FOUND"
           echo "======================================"
 
 
       # ============================================================
-      # SHOW PROJECT STRUCTURE
+      # VERIFY PROJECT
       # ============================================================
 
       - name: Verify project structure
@@ -750,41 +744,45 @@ jobs:
         run: |
           set -e
 
+          cd "$PROJECT_ROOT"
+
           echo "======================================"
           echo "PROJECT ROOT"
           echo "======================================"
 
           echo "$PROJECT_ROOT"
 
-          echo "======================================"
-          echo "PROJECT FILES"
-          echo "======================================"
-
-          cd "$PROJECT_ROOT"
+          echo ""
+          echo "Checking Makefile..."
 
           test -f Makefile
+
+          echo "Checking CIA RSF..."
+
           test -f cia.rsf
+
+          echo "Checking source files..."
 
           test -f source/main.c
           test -f source/dashboard.c
           test -f source/game_data.c
           test -f source/gba_core_mgba.c
 
+          echo "Checking ROMFS..."
+
           test -d romfs/hoenn_reborn
 
+          echo ""
           echo "======================================"
           echo "PROJECT FILES VERIFIED"
           echo "======================================"
-
-          ls -lh Makefile
-          ls -lh cia.rsf
 
           echo ""
           echo "Source files:"
           ls -lh source/
 
           echo ""
-          echo "ROMFS:"
+          echo "ROMFS files:"
           find romfs/hoenn_reborn \
             -maxdepth 1 \
             -type f \
@@ -800,21 +798,19 @@ jobs:
         run: |
           set -e
 
+          cd "$PROJECT_ROOT"
+
           echo "======================================"
           echo "PATCHING HOENN REBORN MAKEFILE"
           echo "======================================"
-
-          echo "Project root:"
-          echo "$PROJECT_ROOT"
-
-          cd "$PROJECT_ROOT"
-
-          test -f Makefile
 
           python3 - <<'PY'
           from pathlib import Path
 
           p = Path("Makefile")
+
+          if not p.exists():
+              raise SystemExit("Makefile not found")
 
           text = p.read_text()
 
@@ -829,14 +825,15 @@ jobs:
               print("Changed mgba-static -> mgba")
 
           else:
-              print("No mgba-static reference found.")
-              print("Makefile may already be patched.")
+              print("Makefile already uses mgba.")
           PY
 
           echo ""
-          echo "Checking Makefile:"
+          echo "Checking mGBA references..."
+
           grep -n "MGBA" Makefile || true
 
+          echo ""
           echo "======================================"
           echo "MAKEFILE PATCH COMPLETE"
           echo "======================================"
@@ -858,27 +855,28 @@ jobs:
           export PATH="/opt/devkitpro/tools/bin:$PATH"
           export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
 
+          cd "$PROJECT_ROOT"
+
           echo "======================================"
           echo "HOENN REBORN BUILD"
           echo "======================================"
 
-          echo "Project root:"
+          echo ""
+          echo "Project:"
           echo "$PROJECT_ROOT"
-
-          cd "$PROJECT_ROOT"
 
           echo ""
           echo "Compiler:"
           arm-none-eabi-gcc --version
 
           echo ""
-          echo "Starting build..."
+          echo "Starting make..."
 
           make -j2
 
           echo ""
           echo "======================================"
-          echo "HOENN REBORN MAKE COMPLETE"
+          echo "HOENN REBORN BUILD FINISHED"
           echo "======================================"
 
 
@@ -946,6 +944,48 @@ jobs:
 
 
       # ============================================================
+      # COPY FINAL FILES INTO WORKSPACE
+      # ============================================================
+
+      - name: Prepare build artifacts
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_ROOT"
+
+          rm -rf "$GITHUB_WORKSPACE/final_build"
+
+          mkdir -p "$GITHUB_WORKSPACE/final_build"
+
+          cp Hoenn_Reborn.cia \
+            "$GITHUB_WORKSPACE/final_build/"
+
+          cp Hoenn_Reborn.3dsx \
+            "$GITHUB_WORKSPACE/final_build/"
+
+          cp Hoenn_Reborn.elf \
+            "$GITHUB_WORKSPACE/final_build/"
+
+          if [ -f Hoenn_Reborn.smdh ]; then
+            cp Hoenn_Reborn.smdh \
+              "$GITHUB_WORKSPACE/final_build/"
+          fi
+
+          if [ -f Hoenn_Reborn.bnr ]; then
+            cp Hoenn_Reborn.bnr \
+              "$GITHUB_WORKSPACE/final_build/"
+          fi
+
+          echo "======================================"
+          echo "FINAL BUILD FILES"
+          echo "======================================"
+
+          ls -lh \
+            "$GITHUB_WORKSPACE/final_build/"
+
+
+      # ============================================================
       # UPLOAD CIA
       # ============================================================
 
@@ -953,7 +993,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Hoenn-Reborn-CIA
-          path: ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.cia
+          path: final_build/Hoenn_Reborn.cia
           if-no-files-found: error
 
 
@@ -965,7 +1005,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Hoenn-Reborn-3DSX
-          path: ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.3dsx
+          path: final_build/Hoenn_Reborn.3dsx
           if-no-files-found: error
 
 
@@ -977,7 +1017,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Hoenn-Reborn-ELF
-          path: ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.elf
+          path: final_build/Hoenn_Reborn.elf
           if-no-files-found: error
 
 
@@ -989,10 +1029,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Hoenn-Reborn-Build-Files
-          path: |
-            ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.cia
-            ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.3dsx
-            ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.elf
-            ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.smdh
-            ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.bnr
-          if-no-files-found: warn
+          path: final_build/*
+          if-no-files-found: error
