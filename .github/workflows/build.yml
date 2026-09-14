@@ -123,7 +123,7 @@ jobs:
             curl \
             unzip
 
-          echo "Host build dependencies installed."
+          echo "Host dependencies installed."
 
           echo "========================================"
           echo "BUILDING BANNERTOOL"
@@ -147,8 +147,6 @@ jobs:
           git submodule update \
             --init \
             --depth 1
-
-          echo "Building bannertool..."
 
           make -j2
 
@@ -253,8 +251,6 @@ jobs:
 
           export PATH="$DEVKITPRO/tools/bin:$PATH"
 
-          echo "tex3ds installed:"
-
           command -v tex3ds
 
           tex3ds --version || true
@@ -275,7 +271,7 @@ jobs:
 
           cd libctru-2.7.0/libctru
 
-          echo "Patching libctru gdbMode warning..."
+          echo "Patching libctru..."
 
           sed -i \
             's/gdbhio_mode_t gdbMode = 0;/gdbhio_mode_t gdbMode __attribute__((unused)) = 0;/' \
@@ -325,11 +321,13 @@ jobs:
 
           cd citro2d-1.6.0
 
-          echo "Patching citro2d source..."
+          echo "Patching C2D_Fade..."
 
           sed -i \
             's/void C2D_Fade(u32 color)/bool C2D_Fade(u32 color)/' \
             source/base.c
+
+          echo "Patching C2D_SetTintMode..."
 
           sed -i \
             's/void C2D_SetTintMode(C2D_TintMode mode)/bool C2D_SetTintMode(C2D_TintMode mode)/' \
@@ -345,29 +343,21 @@ jobs:
             's/void C2D_SetTintMode(C2D_TintMode mode)/bool C2D_SetTintMode(C2D_TintMode mode)/' \
             include/c2d/base.h
 
-          echo "Adding return true to C2D_Fade..."
-
           sed -i \
             '/ctx->fadeClr = color;/a\    return true;' \
             source/base.c
-
-          echo "Adding return true to C2D_SetTintMode..."
 
           sed -i \
             '/ctx->flags = (ctx->flags \&~ C2DiF_TintMode_Mask) | (new_mode << (C2DiF_TintMode_Shift - C2DiF_Mode_Shift));/a\    return true;' \
             source/base.c
 
-          echo "========================================"
-          echo "CHECKING CITRO2D DECLARATIONS"
-          echo "========================================"
+          echo "Checking citro2d declarations..."
 
           grep -n \
             "C2D_Fade\|C2D_SetTintMode" \
             include/c2d/base.h
 
-          echo "========================================"
-          echo "BUILDING CITRO2D"
-          echo "========================================"
+          echo "Building citro2d..."
 
           make -j2
 
@@ -393,6 +383,24 @@ jobs:
           mv mgba-0.10.5 mgba
 
           echo "mGBA source downloaded."
+
+          echo "========================================"
+          echo "CHECKING MGBA SOURCE"
+          echo "========================================"
+
+          if [ ! -f "mgba/CMakeLists.txt" ]; then
+            echo "ERROR: mGBA CMakeLists.txt not found."
+
+            find mgba \
+              -maxdepth 2 \
+              -type f \
+              -name "CMakeLists.txt" \
+              -print
+
+            exit 1
+          fi
+
+          echo "mGBA source is valid."
 
           echo "========================================"
           echo "PATCHING MGBA GBA-ONLY GUI"
@@ -440,47 +448,33 @@ jobs:
 
           if old in text:
               text = text.replace(old, new, 1)
+
           else:
               start = text.find("if (gbBiosPath[0])")
 
-              if start == -1:
-                  print("GB BIOS block not found.")
-                  sys.exit(0)
+              if start != -1:
+                  end_marker = 'mCoreConfigSetValue(&runner->config, "sgb.bios", sgbBiosPath);'
 
-              end_marker = 'mCoreConfigSetValue(&runner->config, "sgb.bios", sgbBiosPath);'
+                  end = text.find(end_marker, start)
 
-              end = text.find(end_marker, start)
+                  if end != -1:
+                      end += len(end_marker)
 
-              if end == -1:
-                  print("End of GB BIOS block not found.")
-                  sys.exit(1)
+                      block = text[start:end]
 
-              end += len(end_marker)
+                      replacement = (
+                          "#ifdef M_CORE_GB\n"
+                          + block
+                          + "\n#endif"
+                      )
 
-              block = text[start:end]
-
-              replacement = (
-                  "#ifdef M_CORE_GB\n"
-                  + block
-                  + "\n#endif"
-              )
-
-              text = text[:start] + replacement + text[end:]
+                      text = text[:start] + replacement + text[end:]
 
           with open(path, "w", encoding="utf-8") as f:
               f.write(text)
 
           print("mGBA GUI patch applied.")
           PY
-
-          echo "Verifying mGBA patch..."
-
-          grep -n \
-            -A15 \
-            -B5 \
-            "gbBiosPath" \
-            "$CONFIG" \
-            | head -80 || true
 
           echo "========================================"
           echo "CONFIGURING MGBA"
@@ -493,8 +487,6 @@ jobs:
           if [ ! -f "mgba/src/platform/3ds/CMakeToolchain.txt" ]; then
             echo "ERROR: mGBA 3DS CMake toolchain was not found."
 
-            echo "Searching for CMakeToolchain.txt..."
-
             find mgba \
               -type f \
               -name "CMakeToolchain.txt" \
@@ -503,7 +495,7 @@ jobs:
             exit 1
           fi
 
-          echo "mGBA 3DS toolchain found:"
+          echo "mGBA toolchain found:"
 
           ls -lh \
             mgba/src/platform/3ds/CMakeToolchain.txt
@@ -532,7 +524,9 @@ jobs:
 
           echo "mGBA build complete."
 
-          echo "Searching for libmgba.a..."
+          echo "========================================"
+          echo "LOCATING MGBA LIBRARY"
+          echo "========================================"
 
           MGBA_LIB=$(find mgba/build-hoenn-3ds \
             -name "libmgba.a" \
@@ -549,7 +543,7 @@ jobs:
             exit 1
           fi
 
-          echo "Found:"
+          echo "Found mGBA library:"
           echo "$MGBA_LIB"
 
           mkdir -p \
@@ -558,13 +552,11 @@ jobs:
           cp "$MGBA_LIB" \
             mgba/build-hoenn-3ds/lib/libmgba-static.a
 
-          echo "mGBA library created:"
-
           ls -lh \
             mgba/build-hoenn-3ds/lib/libmgba-static.a
 
           echo "========================================"
-          echo "PREPARING HOENN REBORN"
+          echo "FIXING HOENN REBORN MGBA PATH"
           echo "========================================"
 
           if [ ! -f "Makefile" ]; then
@@ -573,15 +565,80 @@ jobs:
             exit 1
           fi
 
-          sed -i \
-            's/mgba-static/mgba/g' \
-            Makefile
+          echo "Original mGBA path settings:"
+
+          grep -n \
+            "MGBA_DIR\|MGBA_BUILD\|MGBA_INC\|MGBA_GEN_INC" \
+            Makefile \
+            || true
+
+          echo "Patching project Makefile..."
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("Makefile")
+
+          text = path.read_text()
+
+          text = text.replace(
+              "MGBA_DIR ?= ../mgba",
+              "MGBA_DIR ?= mgba"
+          )
+
+          text = text.replace(
+              "MGBA_BUILD ?= $(MGBA_DIR)/build-hoenn-3ds",
+              "MGBA_BUILD ?= mgba/build-hoenn-3ds"
+          )
+
+          text = text.replace(
+              "MGBA_INC := $(MGBA_DIR)/include",
+              "MGBA_INC := $(MGBA_DIR)/include"
+          )
+
+          text = text.replace(
+              "MGBA_GEN_INC := $(MGBA_BUILD)/include",
+              "MGBA_GEN_INC := $(MGBA_BUILD)/include"
+          )
+
+          text = text.replace(
+              "mgba-static",
+              "mgba"
+          )
+
+          path.write_text(text)
+
+          print("Project Makefile patched.")
+          PY
 
           echo "========================================"
-          echo "PROJECT MAKEFILE"
+          echo "UPDATED MGBA PATH SETTINGS"
           echo "========================================"
 
-          sed -n '1,260p' Makefile
+          grep -n \
+            "MGBA_DIR\|MGBA_BUILD\|MGBA_INC\|MGBA_GEN_INC" \
+            Makefile \
+            || true
+
+          echo "========================================"
+          echo "CHECKING MGBA PATHS"
+          echo "========================================"
+
+          echo "Current directory:"
+          pwd
+
+          echo "mGBA source:"
+          ls -ld mgba
+
+          echo "mGBA CMake file:"
+          ls -lh mgba/CMakeLists.txt
+
+          echo "mGBA build directory:"
+          ls -ld mgba/build-hoenn-3ds
+
+          echo "mGBA library:"
+          ls -lh \
+            mgba/build-hoenn-3ds/lib/libmgba-static.a
 
           echo "========================================"
           echo "BUILDING HOENN REBORN"
@@ -614,8 +671,6 @@ jobs:
           BUILD_SCRIPT
 
           chmod +x build-inside.sh
-
-          echo "build-inside.sh created."
 
           ls -lh build-inside.sh
 
@@ -662,8 +717,6 @@ jobs:
           if [ -z "$CIA" ]; then
             echo "ERROR: No CIA file was produced."
 
-            echo "Build output:"
-
             find . \
               -maxdepth 6 \
               -type f \
@@ -676,8 +729,6 @@ jobs:
           echo "========================================"
           echo "CIA FOUND"
           echo "========================================"
-
-          echo "$CIA"
 
           ls -lh "$CIA"
 
