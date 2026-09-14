@@ -371,13 +371,15 @@ jobs:
             's/void C2D_SetTintMode(C2D_TintMode mode)/bool C2D_SetTintMode(C2D_TintMode mode)/' \
             source/base.c
 
+          echo "Patching citro2d header..."
+
           sed -i \
             's/void C2D_Fade(u32 color)/bool C2D_Fade(u32 color)/' \
-            include/citro2d.h
+            include/c2d/base.h
 
           sed -i \
             's/void C2D_SetTintMode(C2D_TintMode mode)/bool C2D_SetTintMode(C2D_TintMode mode)/' \
-            include/citro2d.h
+            include/c2d/base.h
 
           echo "Adding return true to C2D_Fade..."
 
@@ -391,7 +393,17 @@ jobs:
             '/ctx->flags = (ctx->flags \&~ C2DiF_TintMode_Mask) | (new_mode << (C2DiF_TintMode_Shift - C2DiF_Mode_Shift));/a\    return true;' \
             source/base.c
 
-          echo "Building citro2d..."
+          echo "========================================"
+          echo "CHECKING CITRO2D DECLARATIONS"
+          echo "========================================"
+
+          grep -n \
+            "C2D_Fade\|C2D_SetTintMode" \
+            include/c2d/base.h
+
+          echo "========================================"
+          echo "BUILDING CITRO2D"
+          echo "========================================"
 
           make -j2
 
