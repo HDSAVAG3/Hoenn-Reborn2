@@ -49,6 +49,7 @@ jobs:
 
           if [ -f "Makefile" ]; then
             echo "Makefile found."
+
           elif [ -f "Hoenn_Reborn_GitHub_Build.zip" ]; then
             echo "Project ZIP found."
 
@@ -95,57 +96,80 @@ jobs:
           echo "DEVKITPRO=$DEVKITPRO"
           echo "DEVKITARM=$DEVKITARM"
 
-          echo "Testing devkitARM compiler..."
+          echo "========================================"
+          echo "CHECKING DEVKITARM"
+          echo "========================================"
 
           "$DEVKITARM/bin/arm-none-eabi-gcc" --version
 
           echo "========================================"
-          echo "Installing 3DS packaging tools"
+          echo "INSTALLING HOST BUILD DEPENDENCIES"
           echo "========================================"
 
-          mkdir -p /tmp/tools
+          apt-get update
 
-          cd /tmp/tools
+          apt-get install -y \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            libfreetype6-dev \
+            libmagick++-dev \
+            gcc \
+            g++ \
+            make \
+            git \
+            wget \
+            curl \
+            unzip
 
-          echo "----------------------------------------"
-          echo "Downloading bannertool"
-          echo "----------------------------------------"
+          echo "Host build dependencies installed."
 
-          wget -S \
-            https://github.com/Epicpkmn11/bannertool/releases/download/v1.2.2/bannertool.zip \
-            -O bannertool.zip
+          echo "========================================"
+          echo "BUILDING BANNERS TOOL"
+          echo "========================================"
 
-          echo "bannertool download complete."
+          cd /tmp
 
-          ls -lh bannertool.zip
+          rm -rf bannertool
 
-          echo "Extracting bannertool..."
+          echo "Cloning bannertool..."
 
-          rm -rf bannertool-extracted
+          git clone \
+            --depth 1 \
+            https://github.com/Epicpkmn11/bannertool.git \
+            bannertool
 
-          mkdir -p bannertool-extracted
+          cd bannertool
 
-          unzip -o bannertool.zip \
-            -d bannertool-extracted
+          echo "Configuring buildtools submodule..."
 
-          echo "bannertool files:"
+          git config \
+            submodule.buildtools.url \
+            https://github.com/Steveice10/buildtools.git
 
-          find bannertool-extracted \
-            -maxdepth 5 \
-            -type f \
-            -print
+          echo "Initializing buildtools..."
 
-          BANNERTOOL=$(find /tmp/tools/bannertool-extracted \
-            -type f \
-            -name bannertool \
-            | head -1)
+          git submodule update \
+            --init \
+            --depth 1
 
-          if [ -z "$BANNERTOOL" ]; then
-            echo "ERROR: bannertool executable was not found."
+          echo "Bannertool source prepared."
 
-            find /tmp/tools/bannertool-extracted \
+          echo "Building bannertool natively..."
+
+          make -j2
+
+          BANNERTOOL="/tmp/bannertool/output/linux-x86_64/bannertool"
+
+          if [ ! -f "$BANNERTOOL" ]; then
+            echo "ERROR: Native bannertool build did not produce:"
+            echo "$BANNERTOOL"
+
+            find /tmp/bannertool \
               -maxdepth 5 \
               -type f \
+              -name "bannertool" \
               -print
 
             exit 1
@@ -156,38 +180,38 @@ jobs:
           cp "$BANNERTOOL" \
             "$DEVKITPRO/tools/bin/bannertool"
 
-          echo "bannertool installed:"
+          echo "Native bannertool installed."
 
           ls -lh \
             "$DEVKITPRO/tools/bin/bannertool"
 
-          echo "----------------------------------------"
-          echo "Downloading makerom"
-          echo "----------------------------------------"
+          echo "Testing bannertool..."
 
-          wget -S \
+          bannertool --help || true
+
+          echo "========================================"
+          echo "INSTALLING MAKEROM"
+          echo "========================================"
+
+          mkdir -p /tmp/tools
+
+          cd /tmp/tools
+
+          wget -q \
             https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip \
             -O makerom.zip
 
-          echo "makerom download complete."
+          echo "makerom downloaded."
 
           ls -lh makerom.zip
-
-          echo "Extracting makerom..."
 
           rm -rf makerom-extracted
 
           mkdir -p makerom-extracted
 
-          unzip -o makerom.zip \
+          unzip -o \
+            makerom.zip \
             -d makerom-extracted
-
-          echo "makerom files:"
-
-          find makerom-extracted \
-            -maxdepth 5 \
-            -type f \
-            -print
 
           MAKEROM=$(find /tmp/tools/makerom-extracted \
             -type f \
@@ -195,7 +219,7 @@ jobs:
             | head -1)
 
           if [ -z "$MAKEROM" ]; then
-            echo "ERROR: makerom executable was not found."
+            echo "ERROR: makerom executable not found."
 
             find /tmp/tools/makerom-extracted \
               -maxdepth 5 \
@@ -210,33 +234,26 @@ jobs:
           cp "$MAKEROM" \
             "$DEVKITPRO/tools/bin/makerom"
 
-          echo "makerom installed:"
+          echo "makerom installed."
 
           ls -lh \
             "$DEVKITPRO/tools/bin/makerom"
 
-          echo "========================================"
-          echo "Testing packaging tools"
-          echo "========================================"
-
-          command -v bannertool
-
-          command -v makerom
-
-          bannertool --help || true
+          echo "Testing makerom..."
 
           makerom -h || true
 
           echo "========================================"
-          echo "Installing tex3ds"
+          echo "BUILDING TEX3DS"
           echo "========================================"
 
           cd /tmp/tools
 
           rm -rf tex3ds
 
+          echo "Cloning tex3ds v2.3.0..."
+
           git clone \
-            -q \
             --depth 1 \
             --branch v2.3.0 \
             https://github.com/devkitPro/tex3ds.git \
@@ -244,7 +261,7 @@ jobs:
 
           cd tex3ds
 
-          echo "Running tex3ds autogen..."
+          echo "Generating tex3ds configure files..."
 
           ./autogen.sh
 
@@ -263,14 +280,14 @@ jobs:
 
           export PATH="$DEVKITPRO/tools/bin:$PATH"
 
-          echo "tex3ds location:"
+          echo "tex3ds installed:"
 
           command -v tex3ds
 
           tex3ds --version || true
 
           echo "========================================"
-          echo "Building libctru"
+          echo "BUILDING LIBCTRU"
           echo "========================================"
 
           cd /tmp
@@ -302,7 +319,7 @@ jobs:
           echo "libctru complete."
 
           echo "========================================"
-          echo "Building citro3d"
+          echo "BUILDING CITRO3D"
           echo "========================================"
 
           cd /tmp
@@ -328,7 +345,7 @@ jobs:
           echo "citro3d complete."
 
           echo "========================================"
-          echo "Building citro2d"
+          echo "BUILDING CITRO2D"
           echo "========================================"
 
           cd /tmp
@@ -361,13 +378,13 @@ jobs:
             's/void C2D_SetTintMode(C2D_TintMode mode)/bool C2D_SetTintMode(C2D_TintMode mode)/' \
             include/citro2d.h
 
-          echo "Adding return values to C2D_Fade..."
+          echo "Adding return true to C2D_Fade..."
 
           sed -i \
             '/ctx->fadeClr = color;/a\    return true;' \
             source/base.c
 
-          echo "Adding return values to C2D_SetTintMode..."
+          echo "Adding return true to C2D_SetTintMode..."
 
           sed -i \
             '/ctx->flags = (ctx->flags \&~ C2DiF_TintMode_Mask) | (new_mode << (C2DiF_TintMode_Shift - C2DiF_Mode_Shift));/a\    return true;' \
@@ -384,7 +401,7 @@ jobs:
           echo "citro2d complete."
 
           echo "========================================"
-          echo "Downloading mGBA 0.10.5"
+          echo "DOWNLOADING MGBA 0.10.5"
           echo "========================================"
 
           cd /work
@@ -404,18 +421,16 @@ jobs:
           echo "mGBA source downloaded."
 
           echo "========================================"
-          echo "Patching mGBA GBA-only GUI"
+          echo "PATCHING MGBA GBA-ONLY GUI"
           echo "========================================"
 
           CONFIG="mgba/src/feature/gui/gui-config.c"
 
           if [ ! -f "$CONFIG" ]; then
-            echo "ERROR: mGBA GUI config source not found."
+            echo "ERROR: mGBA GUI config not found."
 
             exit 1
           fi
-
-          echo "Patching GB-only BIOS references..."
 
           python3 - "$CONFIG" <<'PY'
           import sys
@@ -449,13 +464,14 @@ jobs:
           #endif
           """
 
-          if old not in text:
-              print("Exact mGBA block was not found.")
+          if old in text:
+              text = text.replace(old, new, 1)
 
+          else:
               start = text.find("if (gbBiosPath[0])")
 
               if start == -1:
-                  print("GB BIOS references were not found.")
+                  print("GB BIOS block not found.")
                   sys.exit(0)
 
               end_marker = 'mCoreConfigSetValue(&runner->config, "sgb.bios", sgbBiosPath);'
@@ -463,19 +479,20 @@ jobs:
               end = text.find(end_marker, start)
 
               if end == -1:
-                  print("End of GB BIOS block was not found.")
+                  print("End of GB BIOS block not found.")
                   sys.exit(1)
 
               end += len(end_marker)
 
               block = text[start:end]
 
-              replacement = "#ifdef M_CORE_GB\n" + block + "\n#endif"
+              replacement = (
+                  "#ifdef M_CORE_GB\n"
+                  + block
+                  + "\n#endif"
+              )
 
               text = text[:start] + replacement + text[end:]
-
-          else:
-              text = text.replace(old, new, 1)
 
           with open(path, "w", encoding="utf-8") as f:
               f.write(text)
@@ -493,7 +510,7 @@ jobs:
             | head -80 || true
 
           echo "========================================"
-          echo "Configuring mGBA for Nintendo 3DS"
+          echo "CONFIGURING MGBA"
           echo "========================================"
 
           rm -rf mgba/build-hoenn-3ds
@@ -512,7 +529,7 @@ jobs:
             -DBUILD_LTO=OFF
 
           echo "========================================"
-          echo "Compiling mGBA"
+          echo "BUILDING MGBA"
           echo "========================================"
 
           cmake \
@@ -520,7 +537,7 @@ jobs:
             --target mgba \
             -j2
 
-          echo "mGBA build finished."
+          echo "mGBA build complete."
 
           echo "Searching for libmgba.a..."
 
@@ -539,8 +556,7 @@ jobs:
             exit 1
           fi
 
-          echo "Found mGBA library:"
-
+          echo "Found:"
           echo "$MGBA_LIB"
 
           mkdir -p \
@@ -555,7 +571,7 @@ jobs:
             mgba/build-hoenn-3ds/lib/libmgba-static.a
 
           echo "========================================"
-          echo "Preparing Hoenn Reborn project"
+          echo "PREPARING HOENN REBORN"
           echo "========================================"
 
           if [ ! -f "Makefile" ]; then
@@ -563,8 +579,6 @@ jobs:
 
             exit 1
           fi
-
-          echo "Changing mGBA target name..."
 
           sed -i \
             's/mgba-static/mgba/g' \
@@ -575,12 +589,6 @@ jobs:
           echo "========================================"
 
           sed -n '1,260p' Makefile
-
-          echo "========================================"
-          echo "PROJECT FILE CHECK"
-          echo "========================================"
-
-          ls -lh
 
           echo "========================================"
           echo "BUILDING HOENN REBORN"
@@ -594,10 +602,8 @@ jobs:
           echo "BUILD COMPLETE"
           echo "========================================"
 
-          echo "Searching for generated files..."
-
           find . \
-            -maxdepth 5 \
+            -maxdepth 6 \
             -type f \
             \( \
               -name "*.cia" \
@@ -616,7 +622,7 @@ jobs:
 
           chmod +x build-inside.sh
 
-          echo "Created build-inside.sh:"
+          echo "build-inside.sh created."
 
           ls -lh build-inside.sh
 
@@ -644,17 +650,13 @@ jobs:
           set -e
 
           echo "========================================"
-          echo "SEARCHING FOR BUILD OUTPUT"
+          echo "SEARCHING FOR CIA"
           echo "========================================"
 
           find . \
             -maxdepth 6 \
             -type f \
-            \( \
-              -name "*.cia" \
-              -o -name "*.3dsx" \
-              -o -name "*.elf" \
-              \) \
+            -name "*.cia" \
             -print
 
           CIA=$(find . \
@@ -667,10 +669,10 @@ jobs:
           if [ -z "$CIA" ]; then
             echo "ERROR: No CIA file was produced."
 
-            echo "Full build directory listing:"
+            echo "Build output:"
 
             find . \
-              -maxdepth 5 \
+              -maxdepth 6 \
               -type f \
               | sort \
               | head -300
