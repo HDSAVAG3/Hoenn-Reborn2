@@ -292,13 +292,6 @@ jobs:
 
           if [ -z "$LIBCTRU_ROOT" ]; then
             echo "ERROR: libctru Makefile not found."
-
-            find /tmp/libctru \
-              -maxdepth 5 \
-              -type f \
-              -name Makefile \
-              -print
-
             exit 1
           fi
 
@@ -393,11 +386,11 @@ jobs:
 
           test -f "$CITRO3D_ROOT/Makefile"
 
+          cd "$CITRO3D_ROOT"
+
           echo "======================================"
           echo "BUILDING CITRO3D"
           echo "======================================"
-
-          cd "$CITRO3D_ROOT"
 
           make -j2
           make install
@@ -421,10 +414,6 @@ jobs:
           rm -rf /tmp/citro2d
           mkdir -p /tmp/citro2d
 
-          echo "======================================"
-          echo "DOWNLOADING CITRO2D 1.6.0"
-          echo "======================================"
-
           wget -O citro2d.tar.gz \
             https://github.com/devkitPro/citro2d/archive/refs/tags/v1.6.0.tar.gz
 
@@ -438,9 +427,8 @@ jobs:
           test -f "$CITRO2D_ROOT/source/base.c"
           test -f "$CITRO2D_ROOT/include/c2d/base.h"
 
-          echo ""
           echo "======================================"
-          echo "PATCHING CITRO2D 1.6.0"
+          echo "PATCHING CITRO2D"
           echo "======================================"
 
           python3 - \
@@ -455,23 +443,11 @@ jobs:
           source_text = source.read_text()
           header_text = header.read_text()
 
-          # ================================================
-          # C2D_Fade
-          # ================================================
-
-          old = "void C2D_Fade(u32 color)"
-          new = "bool C2D_Fade(u32 color)"
-
-          if old in source_text:
-              source_text = source_text.replace(
-                  old,
-                  new,
-                  1
-              )
-          elif "bool C2D_Fade(u32 color)" not in source_text:
-              raise SystemExit(
-                  "ERROR: C2D_Fade declaration not found."
-              )
+          source_text = source_text.replace(
+              "void C2D_Fade(u32 color)",
+              "bool C2D_Fade(u32 color)",
+              1
+          )
 
           marker = "ctx->fadeClr = color;"
 
@@ -490,23 +466,11 @@ jobs:
                   + source_text[end:]
               )
 
-          # ================================================
-          # C2D_SetTintMode
-          # ================================================
-
-          old = "void C2D_SetTintMode(C2D_TintMode mode)"
-          new = "bool C2D_SetTintMode(C2D_TintMode mode)"
-
-          if old in source_text:
-              source_text = source_text.replace(
-                  old,
-                  new,
-                  1
-              )
-          elif "bool C2D_SetTintMode(C2D_TintMode mode)" not in source_text:
-              raise SystemExit(
-                  "ERROR: C2D_SetTintMode declaration not found."
-              )
+          source_text = source_text.replace(
+              "void C2D_SetTintMode(C2D_TintMode mode)",
+              "bool C2D_SetTintMode(C2D_TintMode mode)",
+              1
+          )
 
           marker = (
               "ctx->flags = (ctx->flags &~ C2DiF_TintMode_Mask) "
@@ -531,10 +495,6 @@ jobs:
 
           source.write_text(source_text)
 
-          # ================================================
-          # Header declarations
-          # ================================================
-
           header_text = header_text.replace(
               "void C2D_Fade(u32 color);",
               "bool C2D_Fade(u32 color);"
@@ -547,44 +507,9 @@ jobs:
 
           header.write_text(header_text)
 
-          print("C2D_Fade source fixed.")
-          print("C2D_SetTintMode source fixed.")
-          print("C2D_Fade header fixed.")
-          print("C2D_SetTintMode header fixed.")
+          print("citro2d patched successfully.")
           PY
 
-          echo ""
-          echo "======================================"
-          echo "VERIFYING CITRO2D PATCH"
-          echo "======================================"
-
-          echo ""
-          echo "C2D_Fade source:"
-          grep -n \
-            "bool C2D_Fade" \
-            "$CITRO2D_ROOT/source/base.c"
-
-          echo ""
-          echo "C2D_SetTintMode source:"
-          grep -n \
-            "bool C2D_SetTintMode" \
-            "$CITRO2D_ROOT/source/base.c"
-
-          echo ""
-          echo "Header declarations:"
-          grep -n \
-            "bool C2D_Fade\|bool C2D_SetTintMode" \
-            "$CITRO2D_ROOT/include/c2d/base.h"
-
-          echo ""
-          echo "======================================"
-          echo "CHECKING CITRO2D SOURCE"
-          echo "======================================"
-
-          sed -n '284,325p' \
-            "$CITRO2D_ROOT/source/base.c"
-
-          echo ""
           echo "======================================"
           echo "BUILDING CITRO2D"
           echo "======================================"
@@ -592,18 +517,9 @@ jobs:
           cd "$CITRO2D_ROOT"
 
           make -j2
-
-          echo ""
-          echo "======================================"
-          echo "INSTALLING CITRO2D"
-          echo "======================================"
-
           make install
 
-          echo ""
-          echo "======================================"
-          echo "CITRO2D BUILD COMPLETE"
-          echo "======================================"
+          echo "citro2d complete."
 
       - name: Verify 3DS libraries
         shell: bash
@@ -614,24 +530,6 @@ jobs:
           echo "VERIFYING LIBRARIES"
           echo "======================================"
 
-          echo ""
-          echo "libctru:"
-          find /opt/devkitpro \
-            -name libctru.a \
-            -print
-
-          echo ""
-          echo "libcitro3d:"
-          find /opt/devkitpro \
-            -name libcitro3d.a \
-            -print
-
-          echo ""
-          echo "libcitro2d:"
-          find /opt/devkitpro \
-            -name libcitro2d.a \
-            -print
-
           test -f \
             /opt/devkitpro/libctru/lib/libctru.a
 
@@ -641,10 +539,7 @@ jobs:
           test -f \
             /opt/devkitpro/libctru/lib/libcitro2d.a
 
-          echo ""
-          echo "======================================"
-          echo "ALL 3DS LIBRARIES FOUND"
-          echo "======================================"
+          echo "All 3DS libraries found."
 
       - name: Download mGBA source
         shell: bash
@@ -683,12 +578,6 @@ jobs:
 
           if [ -z "$MGBA_ROOT" ]; then
             echo "ERROR: mGBA CMakeLists.txt not found."
-
-            find /tmp/mgba-source \
-              -maxdepth 3 \
-              -type f \
-              -print
-
             exit 1
           fi
 
@@ -706,6 +595,76 @@ jobs:
 
           echo "mGBA source installed."
 
+      - name: Patch mGBA 0.10.5 for GBA-only build
+        shell: bash
+        run: |
+          set -e
+
+          MGBA="$GITHUB_WORKSPACE/mgba"
+
+          CONFIG="$MGBA/src/feature/gui/gui-config.c"
+
+          echo "======================================"
+          echo "PATCHING mGBA GUI CONFIG"
+          echo "======================================"
+
+          test -f "$CONFIG"
+
+          python3 - "$CONFIG" <<'PY'
+          from pathlib import Path
+          import sys
+
+          p = Path(sys.argv[1])
+          text = p.read_text()
+
+          old = """			if (gbBiosPath[0]) {
+				mCoreConfigSetValue(&runner->config, "gb.bios", gbBiosPath);
+			}
+			if (gbcBiosPath[0]) {
+				mCoreConfigSetValue(&runner->config, "gbc.bios", gbcBiosPath);
+			}
+			if (sgbBiosPath[0]) {
+				mCoreConfigSetValue(&runner->config, "sgb.bios", sgbBiosPath);
+			}
+"""
+
+          new = """#ifdef M_CORE_GB
+			if (gbBiosPath[0]) {
+				mCoreConfigSetValue(&runner->config, "gb.bios", gbBiosPath);
+			}
+			if (gbcBiosPath[0]) {
+				mCoreConfigSetValue(&runner->config, "gbc.bios", gbcBiosPath);
+			}
+			if (sgbBiosPath[0]) {
+				mCoreConfigSetValue(&runner->config, "sgb.bios", sgbBiosPath);
+			}
+#endif
+"""
+
+          if old not in text:
+              if "#ifdef M_CORE_GB" in text and "gbBiosPath[0]" in text:
+                  print("mGBA GB BIOS block appears already patched.")
+              else:
+                  raise SystemExit(
+                      "ERROR: mGBA GB BIOS block not found."
+                  )
+          else:
+              text = text.replace(old, new, 1)
+              p.write_text(text)
+              print("mGBA GB BIOS references patched.")
+
+          print("mGBA GUI configuration patch complete.")
+          PY
+
+          echo ""
+          echo "Checking patched source..."
+
+          grep -n \
+            -A18 \
+            -B5 \
+            "gbBiosPath\[0\]" \
+            "$CONFIG"
+
       - name: Verify mGBA source
         shell: bash
         run: |
@@ -713,6 +672,9 @@ jobs:
 
           test -f \
             "$GITHUB_WORKSPACE/mgba/CMakeLists.txt"
+
+          test -f \
+            "$GITHUB_WORKSPACE/mgba/src/feature/gui/gui-config.c"
 
           echo "======================================"
           echo "mGBA SOURCE VERIFIED"
@@ -729,10 +691,6 @@ jobs:
 
           PROJECT_ROOT=""
 
-          # ------------------------------------------------
-          # First: look for an existing project Makefile.
-          # ------------------------------------------------
-
           while IFS= read -r MAKEFILE; do
             if [ -n "$MAKEFILE" ]; then
               PROJECT_ROOT="$(dirname "$MAKEFILE")"
@@ -745,11 +703,6 @@ jobs:
               -not -path '*/mgba/*' \
               -print
           )
-
-          # ------------------------------------------------
-          # Second: if the project is stored as a ZIP,
-          # extract it and search again.
-          # ------------------------------------------------
 
           if [ -z "$PROJECT_ROOT" ]; then
 
@@ -783,13 +736,9 @@ jobs:
               rm -rf "$EXTRACT_DIR"
               mkdir -p "$EXTRACT_DIR"
 
-              echo "Extracting project..."
-
               unzip -q \
                 "$PROJECT_ZIP" \
                 -d "$EXTRACT_DIR"
-
-              echo "Project extracted."
 
               while IFS= read -r MAKEFILE; do
                 if [ -n "$MAKEFILE" ]; then
@@ -807,16 +756,12 @@ jobs:
             fi
           fi
 
-          # ------------------------------------------------
-          # Final validation.
-          # ------------------------------------------------
-
           if [ -z "$PROJECT_ROOT" ]; then
 
             echo ""
             echo "ERROR: Hoenn Reborn project was not found."
             echo ""
-            echo "Files currently present in workspace:"
+
             find "$GITHUB_WORKSPACE" \
               -maxdepth 5 \
               -type f \
@@ -825,23 +770,15 @@ jobs:
 
             echo ""
             echo "The repository must contain either:"
-            echo "  1. The Hoenn Reborn project files"
+            echo "  1. Hoenn Reborn project files"
             echo "  2. Hoenn_Reborn_GitHub_Build.zip"
 
             exit 1
           fi
 
           echo ""
-          echo "Hoenn Reborn project found:"
+          echo "Hoenn Reborn project:"
           echo "$PROJECT_ROOT"
-
-          echo ""
-          echo "Project files:"
-          find "$PROJECT_ROOT" \
-            -maxdepth 3 \
-            -type f \
-            -print \
-            | sort
 
           echo ""
           echo "HOENN_PROJECT=$PROJECT_ROOT" >> "$GITHUB_ENV"
@@ -857,45 +794,17 @@ jobs:
           echo "VERIFYING PROJECT STRUCTURE"
           echo "======================================"
 
-          if [ ! -f "$PROJECT/Makefile" ]; then
-            echo "ERROR: Makefile missing."
-            exit 1
-          fi
+          test -f "$PROJECT/Makefile"
+          test -f "$PROJECT/cia.rsf"
 
-          if [ ! -f "$PROJECT/cia.rsf" ]; then
-            echo "ERROR: cia.rsf missing."
-            exit 1
-          fi
+          test -f "$PROJECT/source/main.c"
+          test -f "$PROJECT/source/dashboard.c"
+          test -f "$PROJECT/source/game_data.c"
+          test -f "$PROJECT/source/gba_core_mgba.c"
 
-          if [ ! -f "$PROJECT/source/main.c" ]; then
-            echo "ERROR: source/main.c missing."
-            exit 1
-          fi
+          test -d "$PROJECT/romfs/hoenn_reborn"
 
-          if [ ! -f "$PROJECT/source/dashboard.c" ]; then
-            echo "ERROR: source/dashboard.c missing."
-            exit 1
-          fi
-
-          if [ ! -f "$PROJECT/source/game_data.c" ]; then
-            echo "ERROR: source/game_data.c missing."
-            exit 1
-          fi
-
-          if [ ! -f "$PROJECT/source/gba_core_mgba.c" ]; then
-            echo "ERROR: source/gba_core_mgba.c missing."
-            exit 1
-          fi
-
-          if [ ! -d "$PROJECT/romfs/hoenn_reborn" ]; then
-            echo "ERROR: romfs/hoenn_reborn missing."
-            exit 1
-          fi
-
-          echo ""
-          echo "======================================"
-          echo "PROJECT VERIFIED"
-          echo "======================================"
+          echo "PROJECT VERIFIED."
 
       - name: Patch Hoenn Reborn Makefile
         shell: bash
@@ -1016,11 +925,7 @@ jobs:
           echo "BUILDING HOENN REBORN"
           echo "======================================"
 
-          echo "Project:"
           pwd
-
-          echo ""
-          echo "Starting make..."
 
           make -j2
 
