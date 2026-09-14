@@ -115,6 +115,7 @@ jobs:
             pkg-config \
             libfreetype6-dev \
             libmagick++-dev \
+            libfftw3-dev \
             gcc \
             g++ \
             make \
@@ -156,7 +157,7 @@ jobs:
 
           echo "Bannertool source prepared."
 
-          echo "Building bannertool natively..."
+          echo "Building bannertool..."
 
           make -j2
 
@@ -167,7 +168,7 @@ jobs:
             echo "$BANNERTOOL"
 
             find /tmp/bannertool \
-              -maxdepth 5 \
+              -maxdepth 6 \
               -type f \
               -name "bannertool" \
               -print
