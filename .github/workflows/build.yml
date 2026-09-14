@@ -46,7 +46,7 @@ jobs:
             zstd \
             file
 
-          echo "Linux build tools installed."
+          echo "Linux tools installed."
 
 
       # ============================================================
@@ -83,8 +83,6 @@ jobs:
 
           cd /tmp
 
-          echo "Downloading 3DS CMake..."
-
           wget -O 3ds-cmake.pkg.tar.zst \
             https://wii.leseratte10.de/devkitPro/cmake/3ds-cmake-1.5.2-1-any.pkg.tar.zst
 
@@ -96,32 +94,11 @@ jobs:
             -xf 3ds-cmake.pkg.tar.zst \
             -C /tmp/3ds-cmake
 
-          echo "Installing 3DS CMake..."
-
           cp -a \
             /tmp/3ds-cmake/opt/devkitpro/. \
             /opt/devkitpro/
 
-          echo "Downloading Catnip..."
-
-          wget -O catnip.pkg.tar.zst \
-            https://wii.leseratte10.de/devkitPro/other-stuff/catnip-0.2.0-1-any.pkg.tar.zst
-
-          rm -rf /tmp/catnip
-          mkdir -p /tmp/catnip
-
-          tar \
-            --use-compress-program=unzstd \
-            -xf catnip.pkg.tar.zst \
-            -C /tmp/catnip
-
-          echo "Installing Catnip..."
-
-          cp -a \
-            /tmp/catnip/opt/devkitpro/. \
-            /opt/devkitpro/
-
-          echo "3DS CMake helpers installed."
+          echo "3DS CMake installed."
 
 
       # ============================================================
@@ -146,18 +123,16 @@ jobs:
           )"
 
           if [ -z "$CMAKE3DS" ]; then
-            echo "ERROR: arm-none-eabi-cmake was not found."
+            echo "ERROR: arm-none-eabi-cmake not found."
             exit 1
           fi
 
           chmod +x "$CMAKE3DS"
 
-          echo "3DS CMake:"
+          echo "Found:"
           echo "$CMAKE3DS"
 
           "$CMAKE3DS" --version
-
-          echo "3DS CMake is ready."
 
 
       # ============================================================
@@ -204,6 +179,10 @@ jobs:
               -name tex3ds \
               -o \
               -name 3dsxtool \
+              -o \
+              -name picasso \
+              -o \
+              -name bin2s \
             \) \
             -exec chmod +x {} \; \
             2>/dev/null || true
@@ -232,15 +211,12 @@ jobs:
 
           BANNERTOOL_BIN="/tmp/bannertool/linux-x86_64/bannertool"
 
-          if [ ! -f "$BANNERTOOL_BIN" ]; then
-            echo "ERROR: bannertool binary not found."
-            find /tmp/bannertool -type f -print
-            exit 1
-          fi
+          test -f "$BANNERTOOL_BIN"
 
           chmod +x "$BANNERTOOL_BIN"
 
-          cp "$BANNERTOOL_BIN" \
+          cp \
+            "$BANNERTOOL_BIN" \
             /opt/devkitpro/tools/bin/bannertool
 
           chmod +x \
@@ -276,19 +252,12 @@ jobs:
               -quit
           )"
 
-          if [ -z "$MAKEROM_BIN" ]; then
-            echo "ERROR: makerom not found."
-
-            find /tmp/makerom \
-              -type f \
-              -print
-
-            exit 1
-          fi
+          test -n "$MAKEROM_BIN"
 
           chmod +x "$MAKEROM_BIN"
 
-          cp "$MAKEROM_BIN" \
+          cp \
+            "$MAKEROM_BIN" \
             /opt/devkitpro/tools/bin/makerom
 
           chmod +x \
@@ -298,7 +267,7 @@ jobs:
 
 
       # ============================================================
-      # VERIFY TOOLS
+      # VERIFY ALL 3DS TOOLS
       # ============================================================
 
       - name: Verify 3DS tools
@@ -311,29 +280,25 @@ jobs:
           export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
 
           echo "======================================"
-          echo "VERIFYING 3DS TOOLCHAIN"
+          echo "3DS TOOLCHAIN"
           echo "======================================"
 
-          echo "ARM compiler:"
           command -v arm-none-eabi-gcc
-
-          echo "3DS CMake:"
           command -v arm-none-eabi-cmake
-
-          echo "bannertool:"
           command -v bannertool
-
-          echo "makerom:"
           command -v makerom
-
-          echo "tex3ds:"
           command -v tex3ds
-
-          echo "3dsxtool:"
           command -v 3dsxtool
 
+          echo ""
+          echo "Checking shader tools..."
+
+          command -v picasso
+          command -v bin2s
+
+          echo ""
           echo "======================================"
-          echo "3DS TOOLCHAIN READY"
+          echo "ALL 3DS TOOLS AVAILABLE"
           echo "======================================"
 
 
@@ -367,12 +332,9 @@ jobs:
               | xargs dirname
           )"
 
-          if [ -z "$LIBCTRU_ROOT" ]; then
-            echo "ERROR: libctru Makefile not found."
-            exit 1
-          fi
+          test -n "$LIBCTRU_ROOT"
 
-          echo "libctru root:"
+          echo "libctru:"
           echo "$LIBCTRU_ROOT"
 
           GDBHIO_FILE="$(
@@ -383,12 +345,7 @@ jobs:
               -quit
           )"
 
-          if [ -z "$GDBHIO_FILE" ]; then
-            echo "ERROR: gdbhio.c not found."
-            exit 1
-          fi
-
-          echo "Patching gdbMode warning..."
+          test -n "$GDBHIO_FILE"
 
           python3 - "$GDBHIO_FILE" <<'PY'
           from pathlib import Path
@@ -430,10 +387,6 @@ jobs:
               )
           PY
 
-          grep -n \
-            "gdbhio_mode_t gdbMode" \
-            "$GDBHIO_FILE"
-
           cd "$LIBCTRU_ROOT"
 
           make -j2
@@ -451,6 +404,13 @@ jobs:
         run: |
           set -e
 
+          export DEVKITPRO=/opt/devkitpro
+          export DEVKITARM=/opt/devkitpro/devkitARM
+
+          export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
+          export PATH="/opt/devkitpro/tools/bin:$PATH"
+          export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
+
           cd /tmp
 
           rm -rf /tmp/citro3d
@@ -465,10 +425,11 @@ jobs:
 
           CITRO3D_ROOT="/tmp/citro3d/citro3d-1.7.1"
 
-          if [ ! -f "$CITRO3D_ROOT/Makefile" ]; then
-            echo "ERROR: citro3d Makefile not found."
-            exit 1
-          fi
+          test -f "$CITRO3D_ROOT/Makefile"
+
+          echo "======================================"
+          echo "BUILDING CITRO3D"
+          echo "======================================"
 
           cd "$CITRO3D_ROOT"
 
@@ -480,6 +441,10 @@ jobs:
 
       # ============================================================
       # BUILD CITRO2D
+      #
+      # IMPORTANT:
+      # Use citro2d 1.6.0 Makefile.
+      # Do NOT use citro2d 1.7.0 CMake.
       # ============================================================
 
       - name: Build citro2d
@@ -499,41 +464,43 @@ jobs:
           rm -rf /tmp/citro2d
           mkdir -p /tmp/citro2d
 
+          echo "======================================"
+          echo "DOWNLOADING CITRO2D 1.6.0"
+          echo "======================================"
+
           wget -O citro2d.tar.gz \
-            https://github.com/devkitPro/citro2d/archive/refs/tags/v1.7.0.tar.gz
+            https://github.com/devkitPro/citro2d/archive/refs/tags/v1.6.0.tar.gz
 
           tar \
             -xzf citro2d.tar.gz \
             -C /tmp/citro2d
 
-          CITRO2D_ROOT="/tmp/citro2d/citro2d-1.7.0"
+          CITRO2D_ROOT="/tmp/citro2d/citro2d-1.6.0"
 
-          if [ ! -f "$CITRO2D_ROOT/CMakeLists.txt" ]; then
-            echo "ERROR: citro2d CMakeLists.txt not found."
-            exit 1
-          fi
+          test -f "$CITRO2D_ROOT/Makefile"
 
+          echo ""
+          echo "citro2d Makefile found."
+
+          echo ""
           echo "======================================"
-          echo "BUILDING CITRO2D"
+          echo "BUILDING CITRO2D 1.6.0"
           echo "======================================"
 
-          command -v arm-none-eabi-cmake
+          cd "$CITRO2D_ROOT"
 
-          arm-none-eabi-cmake \
-            -S "$CITRO2D_ROOT" \
-            -B "$CITRO2D_ROOT/build" \
-            -DCMAKE_INSTALL_PREFIX=/opt/devkitpro/libctru \
-            -DCMAKE_BUILD_TYPE=Release
+          make -j2
 
-          arm-none-eabi-cmake \
-            --build "$CITRO2D_ROOT/build" \
-            -j2
-
-          arm-none-eabi-cmake \
-            --install "$CITRO2D_ROOT/build"
-
+          echo ""
           echo "======================================"
-          echo "CITRO2D BUILD/INSTALL COMPLETE"
+          echo "INSTALLING CITRO2D"
+          echo "======================================"
+
+          make install
+
+          echo ""
+          echo "======================================"
+          echo "CITRO2D BUILD COMPLETE"
           echo "======================================"
 
 
@@ -547,25 +514,23 @@ jobs:
           set -e
 
           echo "======================================"
-          echo "LIBCTRU"
+          echo "VERIFYING LIBRARIES"
           echo "======================================"
 
+          echo ""
+          echo "libctru:"
           find /opt/devkitpro \
             -name libctru.a \
             -print
 
-          echo "======================================"
-          echo "LIBCITRO3D"
-          echo "======================================"
-
+          echo ""
+          echo "libcitro3d:"
           find /opt/devkitpro \
             -name libcitro3d.a \
             -print
 
-          echo "======================================"
-          echo "LIBCITRO2D"
-          echo "======================================"
-
+          echo ""
+          echo "libcitro2d:"
           find /opt/devkitpro \
             -name libcitro2d.a \
             -print
@@ -579,6 +544,7 @@ jobs:
           test -f \
             /opt/devkitpro/libctru/lib/libcitro2d.a
 
+          echo ""
           echo "======================================"
           echo "ALL 3DS LIBRARIES FOUND"
           echo "======================================"
@@ -605,19 +571,9 @@ jobs:
           wget -O /tmp/mgba.tar.gz \
             https://github.com/mgba-emu/mgba/archive/refs/tags/0.10.5.tar.gz
 
-          echo "mGBA archive downloaded."
-
           tar \
             -xzf /tmp/mgba.tar.gz \
             -C /tmp/mgba-source
-
-          echo "Extracted mGBA directories:"
-
-          find /tmp/mgba-source \
-            -maxdepth 2 \
-            -type f \
-            -name CMakeLists.txt \
-            -print
 
           MGBA_ROOT="$(
             find /tmp/mgba-source \
@@ -631,12 +587,17 @@ jobs:
           )"
 
           if [ -z "$MGBA_ROOT" ]; then
-            echo "ERROR: Could not locate mGBA CMakeLists.txt."
-            find /tmp/mgba-source -maxdepth 3 -print
+            echo "ERROR: mGBA CMakeLists.txt not found."
+
+            find /tmp/mgba-source \
+              -maxdepth 3 \
+              -type f \
+              -print
+
             exit 1
           fi
 
-          echo "mGBA source found at:"
+          echo "mGBA source:"
           echo "$MGBA_ROOT"
 
           rm -rf "$GITHUB_WORKSPACE/mgba"
@@ -645,15 +606,10 @@ jobs:
             "$MGBA_ROOT" \
             "$GITHUB_WORKSPACE/mgba"
 
-          echo "mGBA source installed at:"
-          echo "$GITHUB_WORKSPACE/mgba"
-
           test -f \
             "$GITHUB_WORKSPACE/mgba/CMakeLists.txt"
 
-          echo "======================================"
-          echo "mGBA SOURCE READY"
-          echo "======================================"
+          echo "mGBA source installed."
 
 
       # ============================================================
@@ -665,18 +621,16 @@ jobs:
         run: |
           set -e
 
-          echo "mGBA directory:"
-          ls -la "$GITHUB_WORKSPACE/mgba"
-
-          echo "mGBA CMakeLists:"
           test -f \
             "$GITHUB_WORKSPACE/mgba/CMakeLists.txt"
 
-          echo "mGBA source verified."
+          echo "======================================"
+          echo "mGBA SOURCE VERIFIED"
+          echo "======================================"
 
 
       # ============================================================
-      # LOCATE HOENN REBORN PROJECT
+      # LOCATE HOENN REBORN
       # ============================================================
 
       - name: Locate Hoenn Reborn project
@@ -685,7 +639,7 @@ jobs:
           set -e
 
           echo "======================================"
-          echo "LOCATING HOENN REBORN PROJECT"
+          echo "LOCATING HOENN REBORN"
           echo "======================================"
 
           PROJECT_ROOT="$(
@@ -701,27 +655,22 @@ jobs:
           if [ -z "$PROJECT_ROOT" ]; then
             echo "ERROR: Hoenn Reborn Makefile not found."
 
-            echo "Repository contents:"
             find "$GITHUB_WORKSPACE" \
-              -maxdepth 4 \
+              -maxdepth 5 \
               -type f \
               -print
 
             exit 1
           fi
 
-          echo "Hoenn Reborn project found:"
+          echo "Hoenn Reborn project:"
           echo "$PROJECT_ROOT"
 
           echo "HOENN_PROJECT=$PROJECT_ROOT" >> "$GITHUB_ENV"
 
-          echo "======================================"
-          echo "HOENN PROJECT LOCATED"
-          echo "======================================"
-
 
       # ============================================================
-      # VERIFY PROJECT STRUCTURE
+      # VERIFY PROJECT
       # ============================================================
 
       - name: Verify project structure
@@ -731,11 +680,7 @@ jobs:
 
           PROJECT="$HOENN_PROJECT"
 
-          echo "Project:"
-          echo "$PROJECT"
-
           test -f "$PROJECT/Makefile"
-
           test -f "$PROJECT/cia.rsf"
 
           test -f "$PROJECT/source/main.c"
@@ -746,12 +691,12 @@ jobs:
           test -d "$PROJECT/romfs/hoenn_reborn"
 
           echo "======================================"
-          echo "PROJECT STRUCTURE VERIFIED"
+          echo "PROJECT VERIFIED"
           echo "======================================"
 
 
       # ============================================================
-      # PATCH MAKEFILE
+      # PATCH HOENN REBORN MAKEFILE
       # ============================================================
 
       - name: Patch Hoenn Reborn Makefile
@@ -776,17 +721,12 @@ jobs:
 
           p.write_text(text)
 
-          print("Makefile patched.")
+          print("Hoenn Reborn Makefile patched.")
           PY
-
-          echo "Patched Makefile:"
-          grep -n \
-            "mgba" \
-            "$PROJECT/Makefile" || true
 
 
       # ============================================================
-      # BUILD mGBA CORE
+      # BUILD mGBA
       # ============================================================
 
       - name: Build mGBA core
@@ -801,18 +741,18 @@ jobs:
           export PATH="/opt/devkitpro/tools/bin:$PATH"
           export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
 
-          cd "$HOENN_PROJECT"
-
-          echo "======================================"
-          echo "BUILDING mGBA"
-          echo "======================================"
+          PROJECT="$HOENN_PROJECT"
 
           mkdir -p \
-            "$HOENN_PROJECT/mgba/build-hoenn-3ds"
+            "$PROJECT/mgba/build-hoenn-3ds"
+
+          echo "======================================"
+          echo "CONFIGURING mGBA"
+          echo "======================================"
 
           arm-none-eabi-cmake \
             -S "$GITHUB_WORKSPACE/mgba" \
-            -B "$HOENN_PROJECT/mgba/build-hoenn-3ds" \
+            -B "$PROJECT/mgba/build-hoenn-3ds" \
             -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/mgba/src/platform/3ds/CMakeToolchain.txt" \
             -D3DS=ON \
             -DLIBMGBA_ONLY=ON \
@@ -823,29 +763,27 @@ jobs:
             -DDISABLE_DEPS=ON \
             -DBUILD_LTO=OFF
 
-          echo "Building mGBA..."
+          echo "======================================"
+          echo "BUILDING mGBA"
+          echo "======================================"
 
           arm-none-eabi-cmake \
-            --build "$HOENN_PROJECT/mgba/build-hoenn-3ds" \
+            --build "$PROJECT/mgba/build-hoenn-3ds" \
             -j2
 
           echo "Searching for libmgba.a..."
 
-          find "$HOENN_PROJECT/mgba/build-hoenn-3ds" \
-            -name libmgba.a \
-            -print
-
           MGBA_LIB="$(
-            find "$HOENN_PROJECT/mgba/build-hoenn-3ds" \
+            find "$PROJECT/mgba/build-hoenn-3ds" \
               -name libmgba.a \
               -print \
               -quit
           )"
 
           if [ -z "$MGBA_LIB" ]; then
-            echo "ERROR: libmgba.a was not built."
+            echo "ERROR: libmgba.a was not produced."
 
-            find "$HOENN_PROJECT/mgba/build-hoenn-3ds" \
+            find "$PROJECT/mgba/build-hoenn-3ds" \
               -type f \
               -print
 
@@ -855,9 +793,10 @@ jobs:
           echo "mGBA library:"
           echo "$MGBA_LIB"
 
-          if [ "$MGBA_LIB" != "$HOENN_PROJECT/mgba/build-hoenn-3ds/libmgba.a" ]; then
-            cp "$MGBA_LIB" \
-              "$HOENN_PROJECT/mgba/build-hoenn-3ds/libmgba.a"
+          if [ "$MGBA_LIB" != "$PROJECT/mgba/build-hoenn-3ds/libmgba.a" ]; then
+            cp \
+              "$MGBA_LIB" \
+              "$PROJECT/mgba/build-hoenn-3ds/libmgba.a"
           fi
 
           echo "======================================"
@@ -884,16 +823,18 @@ jobs:
           cd "$HOENN_PROJECT"
 
           echo "======================================"
-          echo "HOENN REBORN BUILD"
+          echo "BUILDING HOENN REBORN"
           echo "======================================"
 
-          echo "Project directory:"
+          echo "Project:"
           pwd
 
+          echo ""
           echo "Starting make..."
 
           make -j2
 
+          echo ""
           echo "======================================"
           echo "HOENN REBORN BUILD COMPLETE"
           echo "======================================"
@@ -917,7 +858,6 @@ jobs:
           echo "======================================"
 
           ls -lh Hoenn_Reborn.cia
-
           wc -c Hoenn_Reborn.cia
 
 
@@ -939,7 +879,6 @@ jobs:
           echo "======================================"
 
           ls -lh Hoenn_Reborn.3dsx
-
           wc -c Hoenn_Reborn.3dsx
 
 
@@ -961,12 +900,11 @@ jobs:
           echo "======================================"
 
           ls -lh Hoenn_Reborn.elf
-
           wc -c Hoenn_Reborn.elf
 
 
       # ============================================================
-      # PREPARE BUILD ARTIFACTS
+      # PREPARE ARTIFACTS
       # ============================================================
 
       - name: Prepare build artifacts
@@ -974,29 +912,36 @@ jobs:
         run: |
           set -e
 
-          mkdir -p "$GITHUB_WORKSPACE/build-artifacts"
+          rm -rf "$GITHUB_WORKSPACE/build-artifacts"
 
-          cp "$HOENN_PROJECT/Hoenn_Reborn.cia" \
+          mkdir -p \
+            "$GITHUB_WORKSPACE/build-artifacts"
+
+          cp \
+            "$HOENN_PROJECT/Hoenn_Reborn.cia" \
             "$GITHUB_WORKSPACE/build-artifacts/"
 
-          cp "$HOENN_PROJECT/Hoenn_Reborn.3dsx" \
+          cp \
+            "$HOENN_PROJECT/Hoenn_Reborn.3dsx" \
             "$GITHUB_WORKSPACE/build-artifacts/"
 
-          cp "$HOENN_PROJECT/Hoenn_Reborn.elf" \
+          cp \
+            "$HOENN_PROJECT/Hoenn_Reborn.elf" \
             "$GITHUB_WORKSPACE/build-artifacts/"
 
           if [ -f "$HOENN_PROJECT/Hoenn_Reborn.smdh" ]; then
-            cp "$HOENN_PROJECT/Hoenn_Reborn.smdh" \
+            cp \
+              "$HOENN_PROJECT/Hoenn_Reborn.smdh" \
               "$GITHUB_WORKSPACE/build-artifacts/"
           fi
 
           if [ -f "$HOENN_PROJECT/Hoenn_Reborn.bnr" ]; then
-            cp "$HOENN_PROJECT/Hoenn_Reborn.bnr" \
+            cp \
+              "$HOENN_PROJECT/Hoenn_Reborn.bnr" \
               "$GITHUB_WORKSPACE/build-artifacts/"
           fi
 
-          echo "Build artifacts prepared."
-
+          echo "Artifacts:"
           ls -lh \
             "$GITHUB_WORKSPACE/build-artifacts"
 
@@ -1038,7 +983,7 @@ jobs:
 
 
       # ============================================================
-      # UPLOAD EVERYTHING
+      # UPLOAD ALL BUILD FILES
       # ============================================================
 
       - name: Upload build files
