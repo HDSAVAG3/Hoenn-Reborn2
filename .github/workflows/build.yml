@@ -15,17 +15,8 @@ jobs:
 
     steps:
 
-      # ============================================================
-      # CHECKOUT
-      # ============================================================
-
       - name: Checkout repository
         uses: actions/checkout@v4
-
-
-      # ============================================================
-      # LINUX TOOLS
-      # ============================================================
 
       - name: Install Linux build tools
         shell: bash
@@ -48,11 +39,6 @@ jobs:
 
           echo "Linux tools installed."
 
-
-      # ============================================================
-      # DEVKITPRO ENVIRONMENT
-      # ============================================================
-
       - name: Configure devkitPro environment
         shell: bash
         run: |
@@ -70,11 +56,6 @@ jobs:
 
           echo "DEVKITPRO=$DEVKITPRO"
           echo "DEVKITARM=$DEVKITARM"
-
-
-      # ============================================================
-      # INSTALL 3DS CMAKE
-      # ============================================================
 
       - name: Install devkitPro CMake helpers
         shell: bash
@@ -99,11 +80,6 @@ jobs:
             /opt/devkitpro/
 
           echo "3DS CMake installed."
-
-
-      # ============================================================
-      # VERIFY 3DS CMAKE
-      # ============================================================
 
       - name: Verify devkitPro CMake
         shell: bash
@@ -133,11 +109,6 @@ jobs:
           echo "$CMAKE3DS"
 
           "$CMAKE3DS" --version
-
-
-      # ============================================================
-      # INSTALL 3DS TOOLS
-      # ============================================================
 
       - name: Install 3dstools
         shell: bash
@@ -189,11 +160,6 @@ jobs:
 
           echo "3dstools installed."
 
-
-      # ============================================================
-      # INSTALL BANNERTOOL
-      # ============================================================
-
       - name: Install bannertool
         shell: bash
         run: |
@@ -223,11 +189,6 @@ jobs:
             /opt/devkitpro/tools/bin/bannertool
 
           echo "bannertool installed."
-
-
-      # ============================================================
-      # INSTALL MAKEROM
-      # ============================================================
 
       - name: Install makerom
         shell: bash
@@ -265,11 +226,6 @@ jobs:
 
           echo "makerom installed."
 
-
-      # ============================================================
-      # VERIFY ALL 3DS TOOLS
-      # ============================================================
-
       - name: Verify 3DS tools
         shell: bash
         run: |
@@ -300,11 +256,6 @@ jobs:
           echo "======================================"
           echo "ALL 3DS TOOLS AVAILABLE"
           echo "======================================"
-
-
-      # ============================================================
-      # BUILD LIBCTRU
-      # ============================================================
 
       - name: Build libctru
         shell: bash
@@ -394,11 +345,6 @@ jobs:
 
           echo "libctru complete."
 
-
-      # ============================================================
-      # BUILD CITRO3D
-      # ============================================================
-
       - name: Build citro3d
         shell: bash
         run: |
@@ -437,15 +383,6 @@ jobs:
           make install
 
           echo "citro3d complete."
-
-
-      # ============================================================
-      # BUILD CITRO2D
-      #
-      # IMPORTANT:
-      # Use citro2d 1.6.0 Makefile.
-      # Do NOT use citro2d 1.7.0 CMake.
-      # ============================================================
 
       - name: Build citro2d
         shell: bash
@@ -503,11 +440,6 @@ jobs:
           echo "CITRO2D BUILD COMPLETE"
           echo "======================================"
 
-
-      # ============================================================
-      # VERIFY 3DS LIBRARIES
-      # ============================================================
-
       - name: Verify 3DS libraries
         shell: bash
         run: |
@@ -548,11 +480,6 @@ jobs:
           echo "======================================"
           echo "ALL 3DS LIBRARIES FOUND"
           echo "======================================"
-
-
-      # ============================================================
-      # DOWNLOAD mGBA
-      # ============================================================
 
       - name: Download mGBA source
         shell: bash
@@ -611,11 +538,6 @@ jobs:
 
           echo "mGBA source installed."
 
-
-      # ============================================================
-      # VERIFY mGBA
-      # ============================================================
-
       - name: Verify mGBA source
         shell: bash
         run: |
@@ -627,11 +549,6 @@ jobs:
           echo "======================================"
           echo "mGBA SOURCE VERIFIED"
           echo "======================================"
-
-
-      # ============================================================
-      # LOCATE HOENN REBORN
-      # ============================================================
 
       - name: Locate Hoenn Reborn project
         shell: bash
@@ -668,11 +585,6 @@ jobs:
 
           echo "HOENN_PROJECT=$PROJECT_ROOT" >> "$GITHUB_ENV"
 
-
-      # ============================================================
-      # VERIFY PROJECT
-      # ============================================================
-
       - name: Verify project structure
         shell: bash
         run: |
@@ -693,11 +605,6 @@ jobs:
           echo "======================================"
           echo "PROJECT VERIFIED"
           echo "======================================"
-
-
-      # ============================================================
-      # PATCH HOENN REBORN MAKEFILE
-      # ============================================================
 
       - name: Patch Hoenn Reborn Makefile
         shell: bash
@@ -723,11 +630,6 @@ jobs:
 
           print("Hoenn Reborn Makefile patched.")
           PY
-
-
-      # ============================================================
-      # BUILD mGBA
-      # ============================================================
 
       - name: Build mGBA core
         shell: bash
@@ -803,11 +705,6 @@ jobs:
           echo "mGBA BUILD COMPLETE"
           echo "======================================"
 
-
-      # ============================================================
-      # BUILD HOENN REBORN
-      # ============================================================
-
       - name: Build Hoenn Reborn
         shell: bash
         run: |
@@ -839,11 +736,6 @@ jobs:
           echo "HOENN REBORN BUILD COMPLETE"
           echo "======================================"
 
-
-      # ============================================================
-      # VERIFY CIA
-      # ============================================================
-
       - name: Verify CIA
         shell: bash
         run: |
@@ -859,11 +751,6 @@ jobs:
 
           ls -lh Hoenn_Reborn.cia
           wc -c Hoenn_Reborn.cia
-
-
-      # ============================================================
-      # VERIFY 3DSX
-      # ============================================================
 
       - name: Verify 3DSX
         shell: bash
@@ -881,11 +768,6 @@ jobs:
           ls -lh Hoenn_Reborn.3dsx
           wc -c Hoenn_Reborn.3dsx
 
-
-      # ============================================================
-      # VERIFY ELF
-      # ============================================================
-
       - name: Verify ELF
         shell: bash
         run: |
@@ -901,11 +783,6 @@ jobs:
 
           ls -lh Hoenn_Reborn.elf
           wc -c Hoenn_Reborn.elf
-
-
-      # ============================================================
-      # PREPARE ARTIFACTS
-      # ============================================================
 
       - name: Prepare build artifacts
         shell: bash
@@ -945,22 +822,12 @@ jobs:
           ls -lh \
             "$GITHUB_WORKSPACE/build-artifacts"
 
-
-      # ============================================================
-      # UPLOAD CIA
-      # ============================================================
-
       - name: Upload CIA
         uses: actions/upload-artifact@v4
         with:
           name: Hoenn-Reborn-CIA
           path: build-artifacts/Hoenn_Reborn.cia
           if-no-files-found: error
-
-
-      # ============================================================
-      # UPLOAD 3DSX
-      # ============================================================
 
       - name: Upload 3DSX
         uses: actions/upload-artifact@v4
@@ -969,22 +836,12 @@ jobs:
           path: build-artifacts/Hoenn_Reborn.3dsx
           if-no-files-found: error
 
-
-      # ============================================================
-      # UPLOAD ELF
-      # ============================================================
-
       - name: Upload ELF
         uses: actions/upload-artifact@v4
         with:
           name: Hoenn-Reborn-ELF
           path: build-artifacts/Hoenn_Reborn.elf
           if-no-files-found: error
-
-
-      # ============================================================
-      # UPLOAD ALL BUILD FILES
-      # ============================================================
 
       - name: Upload build files
         uses: actions/upload-artifact@v4
