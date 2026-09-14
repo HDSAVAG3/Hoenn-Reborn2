@@ -1,31 +1,29 @@
 name: Build Hoenn Reborn
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
+    name: Build CIA
     runs-on: ubuntu-latest
 
-    container:
-      image: devkitpro/devkitarm:latest
-
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Linux build tools
+      - name: Install host tools
         shell: bash
         run: |
           set -e
-
-          apt-get update
-
-          apt-get install -y \
+          sudo apt-get update
+          sudo apt-get install -y \
             wget \
             curl \
             git \
@@ -35,1015 +33,347 @@ jobs:
             unzip \
             xz-utils \
             zstd \
-            file
+            p7zip-full
 
-          echo "Linux tools installed."
-
-      - name: Configure devkitPro environment
+      - name: Prepare devkitARM
         shell: bash
         run: |
           set -e
 
-          export DEVKITPRO=/opt/devkitpro
-          export DEVKITARM=/opt/devkitpro/devkitARM
+          docker pull devkitpro/devkitarm:latest
 
-          echo "DEVKITPRO=$DEVKITPRO" >> "$GITHUB_ENV"
-          echo "DEVKITARM=$DEVKITARM" >> "$GITHUB_ENV"
+          mkdir -p "$GITHUB_WORKSPACE/toolchain"
 
-          echo "/opt/devkitpro/devkitARM/bin" >> "$GITHUB_PATH"
-          echo "/opt/devkitpro/tools/bin" >> "$GITHUB_PATH"
-          echo "/opt/devkitpro/portlibs/3ds/bin" >> "$GITHUB_PATH"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/work" \
+            devkitpro/devkitarm:latest \
+            bash -lc '
+              echo "DEVKITPRO=$DEVKITPRO"
+              echo "DEVKITARM=$DEVKITARM"
+              "$DEVKITARM/bin/arm-none-eabi-gcc" --version
+            '
 
-          echo "DEVKITPRO=$DEVKITPRO"
-          echo "DEVKITARM=$DEVKITARM"
-
-      - name: Install devkitPro CMake helpers
+      - name: Find project
         shell: bash
         run: |
           set -e
 
-          cd /tmp
+          echo "Workspace:"
+          ls -la
 
-          wget -O 3ds-cmake.pkg.tar.zst \
-            https://wii.leseratte10.de/devkitPro/cmake/3ds-cmake-1.5.2-1-any.pkg.tar.zst
+          if [ -f "Makefile" ]; then
+            echo "Project found in repository root."
+            exit 0
+          fi
 
-          rm -rf /tmp/3ds-cmake
-          mkdir -p /tmp/3ds-cmake
+          if [ -f "Hoenn_Reborn_GitHub_Build.zip" ]; then
+            echo "Found project ZIP."
+            unzip -o "Hoenn_Reborn_GitHub_Build.zip"
+          fi
 
-          tar \
-            --use-compress-program=unzstd \
-            -xf 3ds-cmake.pkg.tar.zst \
-            -C /tmp/3ds-cmake
+          if [ -f "Hoenn_Reborn_GitHub_Build/Makefile" ]; then
+            cp -a Hoenn_Reborn_GitHub_Build/. .
+          fi
 
-          cp -a \
-            /tmp/3ds-cmake/opt/devkitpro/. \
-            /opt/devkitpro/
-
-          echo "3DS CMake installed."
-
-      - name: Verify devkitPro CMake
-        shell: bash
-        run: |
-          set -e
-
-          export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
-          export PATH="/opt/devkitpro/tools/bin:$PATH"
-          export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
-
-          CMAKE3DS="$(
-            find /opt/devkitpro \
-              -type f \
-              -name arm-none-eabi-cmake \
-              -print \
-              -quit
-          )"
-
-          if [ -z "$CMAKE3DS" ]; then
-            echo "ERROR: arm-none-eabi-cmake not found."
+          if [ ! -f "Makefile" ]; then
+            echo "ERROR: Could not find the Hoenn Reborn Makefile."
+            echo "Files currently in workspace:"
+            find . -maxdepth 3 -type f | sort | head -200
             exit 1
           fi
 
-          chmod +x "$CMAKE3DS"
+          echo "Project is ready."
 
-          echo "Found:"
-          echo "$CMAKE3DS"
-
-          "$CMAKE3DS" --version
-
-      - name: Install 3dstools
+      - name: Build 3DS libraries and project
         shell: bash
         run: |
           set -e
 
-          cd /tmp
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/work" \
+            -w /work \
+            devkitpro/devkitarm:latest \
+            bash -lc '
 
-          wget -O 3dstools.pkg.tar.zst \
-            https://wii.leseratte10.de/devkitPro/other-stuff/3dstools/3dstools-1.3.1-3-linux_x86_64.pkg.tar.zst
+              set -e
 
-          rm -rf /tmp/3dstools
-          mkdir -p /tmp/3dstools
+              export DEVKITPRO=/opt/devkitpro
+              export DEVKITARM=/opt/devkitpro/devkitARM
+              export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
 
-          tar \
-            --use-compress-program=unzstd \
-            -xf 3dstools.pkg.tar.zst \
-            -C /tmp/3dstools
+              echo "========================================"
+              echo "DEVKITARM"
+              echo "========================================"
 
-          if [ -d /tmp/3dstools/opt/devkitpro/tools ]; then
-            mkdir -p /opt/devkitpro/tools
+              "$DEVKITARM/bin/arm-none-eabi-gcc" --version
 
-            cp -a \
-              /tmp/3dstools/opt/devkitpro/tools/. \
-              /opt/devkitpro/tools/
-          fi
+              echo "========================================"
+              echo "Build directories"
+              echo "========================================"
 
-          if [ -d /tmp/3dstools/usr/bin ]; then
-            mkdir -p /opt/devkitpro/tools/bin
+              mkdir -p /tmp/3ds-libs
+              cd /tmp/3ds-libs
 
-            cp -a \
-              /tmp/3dstools/usr/bin/. \
-              /opt/devkitpro/tools/bin/
-          fi
+              echo "========================================"
+              echo "libctru"
+              echo "========================================"
 
-          find /opt/devkitpro/tools \
-            -type f \
-            \( \
-              -name tex3ds \
-              -o \
-              -name 3dsxtool \
-              -o \
-              -name picasso \
-              -o \
-              -name bin2s \
-            \) \
-            -exec chmod +x {} \; \
-            2>/dev/null || true
+              rm -rf libctru-2.7.0
 
-          echo "3dstools installed."
+              wget -q \
+                https://github.com/devkitPro/libctru/archive/refs/tags/v2.7.0.tar.gz \
+                -O libctru.tar.gz
 
-      - name: Install bannertool
-        shell: bash
-        run: |
-          set -e
+              tar -xzf libctru.tar.gz
 
-          cd /tmp
+              cd libctru-2.7.0/libctru
 
-          wget -O bannertool.zip \
-            https://github.com/Epicpkmn11/bannertool/releases/download/v1.2.2/bannertool.zip
+              python3 - <<'"'"'PY'"'"'
+from pathlib import Path
 
-          rm -rf /tmp/bannertool
-          mkdir -p /tmp/bannertool
+p = Path("source/gdbhio.c")
 
-          unzip -q bannertool.zip -d /tmp/bannertool
+if p.exists():
+    s = p.read_text()
 
-          BANNERTOOL_BIN="/tmp/bannertool/linux-x86_64/bannertool"
+    old = "gdbhio_mode_t gdbMode = 0;"
 
-          test -f "$BANNERTOOL_BIN"
+    new = "gdbhio_mode_t gdbMode __attribute__((unused)) = 0;"
 
-          chmod +x "$BANNERTOOL_BIN"
+    if old in s:
+        s = s.replace(old, new)
+        p.write_text(s)
+        print("Patched gdbMode warning.")
+    else:
+        print("gdbMode line already patched or changed.")
+PY
 
-          cp \
-            "$BANNERTOOL_BIN" \
-            /opt/devkitpro/tools/bin/bannertool
+              make -j2
+              make install
 
-          chmod +x \
-            /opt/devkitpro/tools/bin/bannertool
+              echo "========================================"
+              echo "citro3d"
+              echo "========================================"
 
-          echo "bannertool installed."
+              cd /tmp/3ds-libs
 
-      - name: Install makerom
-        shell: bash
-        run: |
-          set -e
+              rm -rf citro3d-1.6.2
 
-          cd /tmp
+              wget -q \
+                https://github.com/devkitPro/citro3d/archive/refs/tags/v1.6.2.tar.gz \
+                -O citro3d.tar.gz
 
-          wget -O makerom.zip \
-            https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip
+              tar -xzf citro3d.tar.gz
 
-          rm -rf /tmp/makerom
-          mkdir -p /tmp/makerom
+              cd citro3d-1.6.2
 
-          unzip -q makerom.zip -d /tmp/makerom
-
-          MAKEROM_BIN="$(
-            find /tmp/makerom \
-              -type f \
-              -name makerom \
-              -print \
-              -quit
-          )"
-
-          if [ -z "$MAKEROM_BIN" ]; then
-            echo "ERROR: makerom executable not found."
-            find /tmp/makerom -maxdepth 4 -type f -print
-            exit 1
-          fi
-
-          chmod +x "$MAKEROM_BIN"
-
-          cp \
-            "$MAKEROM_BIN" \
-            /opt/devkitpro/tools/bin/makerom
-
-          chmod +x \
-            /opt/devkitpro/tools/bin/makerom
-
-          echo "makerom installed."
-
-      - name: Verify 3DS tools
-        shell: bash
-        run: |
-          set -e
-
-          export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
-          export PATH="/opt/devkitpro/tools/bin:$PATH"
-          export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
-
-          echo "======================================"
-          echo "3DS TOOLCHAIN"
-          echo "======================================"
-
-          command -v arm-none-eabi-gcc
-          command -v arm-none-eabi-cmake
-          command -v bannertool
-          command -v makerom
-          command -v tex3ds
-          command -v 3dsxtool
-
-          echo ""
-          echo "Checking shader tools..."
-
-          command -v picasso
-          command -v bin2s
-
-          echo ""
-          echo "======================================"
-          echo "ALL 3DS TOOLS AVAILABLE"
-          echo "======================================"
-
-      - name: Build libctru
-        shell: bash
-        run: |
-          set -e
-
-          cd /tmp
-
-          rm -rf /tmp/libctru
-          mkdir -p /tmp/libctru
-
-          wget -O libctru.tar.gz \
-            https://github.com/devkitPro/libctru/archive/refs/tags/v2.7.0.tar.gz
-
-          tar \
-            -xzf libctru.tar.gz \
-            -C /tmp/libctru
-
-          LIBCTRU_ROOT="$(
-            find /tmp/libctru/libctru-2.7.0 \
-              -type f \
-              -name Makefile \
-              -print \
-              -quit \
-              | while read -r MAKEFILE; do
-                  dirname "$MAKEFILE"
-                  break
-                done
-          )"
+              make -j2
+              make install
 
-          if [ -z "$LIBCTRU_ROOT" ]; then
-            echo "ERROR: libctru Makefile not found."
-            exit 1
-          fi
+              echo "========================================"
+              echo "citro2d"
+              echo "========================================"
 
-          echo "libctru:"
-          echo "$LIBCTRU_ROOT"
+              cd /tmp/3ds-libs
 
-          GDBHIO_FILE="$(
-            find /tmp/libctru/libctru-2.7.0 \
-              -type f \
-              -name gdbhio.c \
-              -print \
-              -quit
-          )"
+              rm -rf citro2d-1.7.0
 
-          if [ -z "$GDBHIO_FILE" ]; then
-            echo "ERROR: gdbhio.c not found."
-            exit 1
-          fi
+              wget -q \
+                https://github.com/devkitPro/citro2d/archive/refs/tags/v1.7.0.tar.gz \
+                -O citro2d.tar.gz
 
-          python3 - "$GDBHIO_FILE" <<'PY'
-          from pathlib import Path
-          import re
-          import sys
+              tar -xzf citro2d.tar.gz
 
-          p = Path(sys.argv[1])
-          text = p.read_text()
+              cd citro2d-1.7.0
 
-          pattern = re.compile(
-              r'(?m)^(\s*)gdbhio_mode_t\s+gdbMode\s*=\s*0\s*;\s*$'
-          )
+              echo "Checking citro2d..."
 
-          match = pattern.search(text)
+              if [ -f "Makefile" ]; then
+                make -j2
+                make install
+              else
+                echo "citro2d Makefile not present."
+                echo "Using CMake build."
 
-          if match:
-              replacement = (
-                  match.group(1)
-                  + "gdbhio_mode_t gdbMode "
-                    "__attribute__((unused)) = 0;"
-              )
+                mkdir build
+                cd build
 
-              text = (
-                  text[:match.start()]
-                  + replacement
-                  + text[match.end():]
-              )
+                cmake .. \
+                  -DCMAKE_TOOLCHAIN_FILE="$DEVKITARM/3ds_rules"
 
-              p.write_text(text)
+                make -j2
+                make install
+              fi
 
-              print("gdbMode patched.")
+              echo "========================================"
+              echo "3DS libraries complete"
+              echo "========================================"
 
-          elif "__attribute__((unused))" in text and "gdbMode" in text:
-              print("gdbMode already patched.")
+              ls -lh "$DEVKITPRO/libctru/lib" || true
 
-          else:
-              raise SystemExit(
-                  "ERROR: gdbMode declaration not found."
-              )
-          PY
+              echo "========================================"
+              echo "mGBA"
+              echo "========================================"
 
-          cd "$LIBCTRU_ROOT"
+              cd /work
 
-          make -j2
-          make install
+              rm -rf mgba
 
-          echo "libctru complete."
+              wget -q \
+                https://github.com/mgba-emu/mgba/archive/refs/tags/0.10.5.tar.gz \
+                -O mgba.tar.gz
 
-      - name: Build citro3d
-        shell: bash
-        run: |
-          set -e
+              tar -xzf mgba.tar.gz
 
-          export DEVKITPRO=/opt/devkitpro
-          export DEVKITARM=/opt/devkitpro/devkitARM
+              mv mgba-0.10.5 mgba
 
-          export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
-          export PATH="/opt/devkitpro/tools/bin:$PATH"
-          export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
+              CONFIG="mgba/src/feature/gui/gui-config.c"
 
-          cd /tmp
+              python3 - "$CONFIG" <<'"'"'PY'"'"'
+import sys
+from pathlib import Path
 
-          rm -rf /tmp/citro3d
-          mkdir -p /tmp/citro3d
+path = Path(sys.argv[1])
+text = path.read_text()
 
-          wget -O citro3d.tar.gz \
-            https://github.com/devkitPro/citro3d/archive/refs/tags/v1.7.1.tar.gz
-
-          tar \
-            -xzf citro3d.tar.gz \
-            -C /tmp/citro3d
-
-          CITRO3D_ROOT="/tmp/citro3d/citro3d-1.7.1"
-
-          test -f "$CITRO3D_ROOT/Makefile"
-
-          cd "$CITRO3D_ROOT"
-
-          echo "======================================"
-          echo "BUILDING CITRO3D"
-          echo "======================================"
-
-          make -j2
-          make install
-
-          echo "citro3d complete."
-
-      - name: Build citro2d
-        shell: bash
-        run: |
-          set -e
-
-          export DEVKITPRO=/opt/devkitpro
-          export DEVKITARM=/opt/devkitpro/devkitARM
-
-          export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
-          export PATH="/opt/devkitpro/tools/bin:$PATH"
-          export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
-
-          cd /tmp
-
-          rm -rf /tmp/citro2d
-          mkdir -p /tmp/citro2d
-
-          wget -O citro2d.tar.gz \
-            https://github.com/devkitPro/citro2d/archive/refs/tags/v1.6.0.tar.gz
-
-          tar \
-            -xzf citro2d.tar.gz \
-            -C /tmp/citro2d
-
-          CITRO2D_ROOT="/tmp/citro2d/citro2d-1.6.0"
-
-          test -f "$CITRO2D_ROOT/Makefile"
-          test -f "$CITRO2D_ROOT/source/base.c"
-          test -f "$CITRO2D_ROOT/include/c2d/base.h"
-
-          echo "======================================"
-          echo "PATCHING CITRO2D"
-          echo "======================================"
-
-          python3 - \
-            "$CITRO2D_ROOT/source/base.c" \
-            "$CITRO2D_ROOT/include/c2d/base.h" <<'PY'
-          from pathlib import Path
-          import sys
-
-          source = Path(sys.argv[1])
-          header = Path(sys.argv[2])
-
-          source_text = source.read_text()
-          header_text = header.read_text()
-
-          source_text = source_text.replace(
-              "void C2D_Fade(u32 color)",
-              "bool C2D_Fade(u32 color)",
-              1
-          )
-
-          marker = "ctx->fadeClr = color;"
-
-          if marker not in source_text:
-              raise SystemExit(
-                  "ERROR: C2D_Fade body not found."
-              )
-
-          pos = source_text.find(marker)
-          end = pos + len(marker)
-
-          if "return true;" not in source_text[end:end + 100]:
-              source_text = (
-                  source_text[:end]
-                  + "\n\treturn true;"
-                  + source_text[end:]
-              )
-
-          source_text = source_text.replace(
-              "void C2D_SetTintMode(C2D_TintMode mode)",
-              "bool C2D_SetTintMode(C2D_TintMode mode)",
-              1
-          )
-
-          marker = (
-              "ctx->flags = (ctx->flags &~ C2DiF_TintMode_Mask) "
-              "| (new_mode << "
-              "(C2DiF_TintMode_Shift - C2DiF_Mode_Shift));"
-          )
-
-          if marker not in source_text:
-              raise SystemExit(
-                  "ERROR: C2D_SetTintMode body not found."
-              )
-
-          pos = source_text.find(marker)
-          end = pos + len(marker)
-
-          if "return true;" not in source_text[end:end + 100]:
-              source_text = (
-                  source_text[:end]
-                  + "\n\treturn true;"
-                  + source_text[end:]
-              )
-
-          source.write_text(source_text)
-
-          header_text = header_text.replace(
-              "void C2D_Fade(u32 color);",
-              "bool C2D_Fade(u32 color);"
-          )
-
-          header_text = header_text.replace(
-              "void C2D_SetTintMode(C2D_TintMode mode);",
-              "bool C2D_SetTintMode(C2D_TintMode mode);"
-          )
-
-          header.write_text(header_text)
-
-          print("citro2d patched successfully.")
-          PY
-
-          echo "======================================"
-          echo "BUILDING CITRO2D"
-          echo "======================================"
-
-          cd "$CITRO2D_ROOT"
-
-          make -j2
-          make install
-
-          echo "citro2d complete."
-
-      - name: Verify 3DS libraries
-        shell: bash
-        run: |
-          set -e
-
-          echo "======================================"
-          echo "VERIFYING LIBRARIES"
-          echo "======================================"
-
-          test -f \
-            /opt/devkitpro/libctru/lib/libctru.a
-
-          test -f \
-            /opt/devkitpro/libctru/lib/libcitro3d.a
-
-          test -f \
-            /opt/devkitpro/libctru/lib/libcitro2d.a
-
-          echo "All 3DS libraries found."
-
-      - name: Download mGBA source
-        shell: bash
-        run: |
-          set -e
-
-          cd /tmp
-
-          echo "======================================"
-          echo "DOWNLOADING mGBA 0.10.5"
-          echo "======================================"
-
-          rm -rf /tmp/mgba-source
-          mkdir -p /tmp/mgba-source
-
-          wget -O /tmp/mgba.tar.gz \
-            https://github.com/mgba-emu/mgba/archive/refs/tags/0.10.5.tar.gz
-
-          tar \
-            -xzf /tmp/mgba.tar.gz \
-            -C /tmp/mgba-source
-
-          MGBA_ROOT="$(
-            find /tmp/mgba-source \
-              -mindepth 1 \
-              -maxdepth 2 \
-              -type f \
-              -name CMakeLists.txt \
-              -print \
-              -quit \
-              | while read -r CMAKEFILE; do
-                  dirname "$CMAKEFILE"
-                  break
-                done
-          )"
-
-          if [ -z "$MGBA_ROOT" ]; then
-            echo "ERROR: mGBA CMakeLists.txt not found."
-            exit 1
-          fi
-
-          echo "mGBA source:"
-          echo "$MGBA_ROOT"
-
-          rm -rf "$GITHUB_WORKSPACE/mgba"
-
-          cp -a \
-            "$MGBA_ROOT" \
-            "$GITHUB_WORKSPACE/mgba"
-
-          test -f \
-            "$GITHUB_WORKSPACE/mgba/CMakeLists.txt"
-
-          echo "mGBA source installed."
-
-      - name: Patch mGBA 0.10.5 for GBA-only build
-        shell: bash
-        run: |
-          set -e
-
-          MGBA="$GITHUB_WORKSPACE/mgba"
-
-          CONFIG="$MGBA/src/feature/gui/gui-config.c"
-
-          echo "======================================"
-          echo "PATCHING mGBA GUI CONFIG"
-          echo "======================================"
-
-          test -f "$CONFIG"
-
-          python3 - "$CONFIG" <<'PY'
-          from pathlib import Path
-          import sys
-
-          p = Path(sys.argv[1])
-          text = p.read_text()
-
-          old = """			if (gbBiosPath[0]) {
-				mCoreConfigSetValue(&runner->config, "gb.bios", gbBiosPath);
-			}
-			if (gbcBiosPath[0]) {
-				mCoreConfigSetValue(&runner->config, "gbc.bios", gbcBiosPath);
-			}
-			if (sgbBiosPath[0]) {
-				mCoreConfigSetValue(&runner->config, "sgb.bios", sgbBiosPath);
-			}
+old = """            if (gbBiosPath[0]) {
+                mCoreConfigSetValue(&runner->config, "gb.bios", gbBiosPath);
+            }
+            if (gbcBiosPath[0]) {
+                mCoreConfigSetValue(&runner->config, "gbc.bios", gbcBiosPath);
+            }
+            if (sgbBiosPath[0]) {
+                mCoreConfigSetValue(&runner->config, "sgb.bios", sgbBiosPath);
+            }
 """
 
-          new = """#ifdef M_CORE_GB
-			if (gbBiosPath[0]) {
-				mCoreConfigSetValue(&runner->config, "gb.bios", gbBiosPath);
-			}
-			if (gbcBiosPath[0]) {
-				mCoreConfigSetValue(&runner->config, "gbc.bios", gbcBiosPath);
-			}
-			if (sgbBiosPath[0]) {
-				mCoreConfigSetValue(&runner->config, "sgb.bios", sgbBiosPath);
-			}
+new = """#ifdef M_CORE_GB
+            if (gbBiosPath[0]) {
+                mCoreConfigSetValue(&runner->config, "gb.bios", gbBiosPath);
+            }
+            if (gbcBiosPath[0]) {
+                mCoreConfigSetValue(&runner->config, "gbc.bios", gbcBiosPath);
+            }
+            if (sgbBiosPath[0]) {
+                mCoreConfigSetValue(&runner->config, "sgb.bios", sgbBiosPath);
+            }
 #endif
 """
 
-          if old not in text:
-              if "#ifdef M_CORE_GB" in text and "gbBiosPath[0]" in text:
-                  print("mGBA GB BIOS block appears already patched.")
-              else:
-                  raise SystemExit(
-                      "ERROR: mGBA GB BIOS block not found."
-                  )
-          else:
-              text = text.replace(old, new, 1)
-              p.write_text(text)
-              print("mGBA GB BIOS references patched.")
+if old in text:
+    text = text.replace(old, new)
+    path.write_text(text)
+    print("mGBA GBA-only GUI patch applied.")
+else:
+    print("mGBA GUI block was already patched or has changed.")
+PY
 
-          print("mGBA GUI configuration patch complete.")
-          PY
+              rm -rf mgba/build-hoenn-3ds
 
-          echo ""
-          echo "Checking patched source..."
+              cmake -S mgba \
+                -B mgba/build-hoenn-3ds \
+                -DCMAKE_TOOLCHAIN_FILE="$DEVKITARM/3ds/CMakeToolchain.txt" \
+                -D3DS=ON \
+                -DLIBMGBA_ONLY=ON \
+                -DBUILD_STATIC=ON \
+                -DBUILD_SHARED=OFF \
+                -DM_CORE_GBA=ON \
+                -DM_CORE_GB=OFF \
+                -DDISABLE_DEPS=ON \
+                -DBUILD_LTO=OFF
 
-          grep -n \
-            -A18 \
-            -B5 \
-            "gbBiosPath\[0\]" \
-            "$CONFIG"
+              cmake --build mgba/build-hoenn-3ds \
+                --target mgba \
+                -j2
 
-      - name: Verify mGBA source
-        shell: bash
-        run: |
-          set -e
+              mkdir -p mgba/build-hoenn-3ds/include
 
-          test -f \
-            "$GITHUB_WORKSPACE/mgba/CMakeLists.txt"
-
-          test -f \
-            "$GITHUB_WORKSPACE/mgba/src/feature/gui/gui-config.c"
-
-          echo "======================================"
-          echo "mGBA SOURCE VERIFIED"
-          echo "======================================"
-
-      - name: Locate Hoenn Reborn project
-        shell: bash
-        run: |
-          set -e
-
-          echo "======================================"
-          echo "LOCATING HOENN REBORN"
-          echo "======================================"
-
-          PROJECT_ROOT=""
-
-          while IFS= read -r MAKEFILE; do
-            if [ -n "$MAKEFILE" ]; then
-              PROJECT_ROOT="$(dirname "$MAKEFILE")"
-              break
-            fi
-          done < <(
-            find "$GITHUB_WORKSPACE" \
-              -type f \
-              -name Makefile \
-              -not -path '*/mgba/*' \
-              -print
-          )
-
-          if [ -z "$PROJECT_ROOT" ]; then
-
-            echo "No project Makefile found."
-
-            PROJECT_ZIP=""
-
-            while IFS= read -r ZIPFILE; do
-              if [ -n "$ZIPFILE" ]; then
-                PROJECT_ZIP="$ZIPFILE"
-                break
-              fi
-            done < <(
-              find "$GITHUB_WORKSPACE" \
-                -type f \
-                \( \
-                  -iname 'Hoenn_Reborn_GitHub_Build.zip' \
-                  -o \
-                  -iname '*Hoenn*Reborn*.zip' \
-                \) \
+              find mgba/build-hoenn-3ds \
+                -name "libmgba.a" \
                 -print
-            )
 
-            if [ -n "$PROJECT_ZIP" ]; then
+              MGBA_LIB=$(find mgba/build-hoenn-3ds \
+                -name "libmgba.a" \
+                -print -quit)
 
-              echo "Found Hoenn Reborn ZIP:"
-              echo "$PROJECT_ZIP"
+              if [ -z "$MGBA_LIB" ]; then
+                echo "ERROR: libmgba.a was not produced."
+                exit 1
+              fi
 
-              EXTRACT_DIR="$GITHUB_WORKSPACE/hoenn-project"
+              mkdir -p mgba/build-hoenn-3ds/lib
+              cp "$MGBA_LIB" mgba/build-hoenn-3ds/lib/libmgba-static.a
 
-              rm -rf "$EXTRACT_DIR"
-              mkdir -p "$EXTRACT_DIR"
+              echo "mGBA library:"
+              ls -lh mgba/build-hoenn-3ds/lib/libmgba-static.a
 
-              unzip -q \
-                "$PROJECT_ZIP" \
-                -d "$EXTRACT_DIR"
+              echo "========================================"
+              echo "Patch project Makefile"
+              echo "========================================"
 
-              while IFS= read -r MAKEFILE; do
-                if [ -n "$MAKEFILE" ]; then
-                  PROJECT_ROOT="$(dirname "$MAKEFILE")"
-                  break
-                fi
-              done < <(
-                find "$EXTRACT_DIR" \
-                  -type f \
-                  -name Makefile \
-                  -not -path '*/mgba/*' \
-                  -print
-              )
+              if [ -f Makefile ]; then
+                sed -i 's/mgba-static/mgba/g' Makefile
+              fi
 
-            fi
-          fi
+              echo "========================================"
+              echo "Project Makefile"
+              echo "========================================"
 
-          if [ -z "$PROJECT_ROOT" ]; then
+              sed -n '1,220p' Makefile
 
-            echo ""
-            echo "ERROR: Hoenn Reborn project was not found."
-            echo ""
+              echo "========================================"
+              echo "Build Hoenn Reborn"
+              echo "========================================"
 
-            find "$GITHUB_WORKSPACE" \
-              -maxdepth 5 \
-              -type f \
-              -print \
-              | sort
+              make clean || true
 
-            echo ""
-            echo "The repository must contain either:"
-            echo "  1. Hoenn Reborn project files"
-            echo "  2. Hoenn_Reborn_GitHub_Build.zip"
+              make -j2
 
+              echo "========================================"
+              echo "BUILD COMPLETE"
+              echo "========================================"
+
+              ls -lh \
+                Hoenn_Reborn.cia \
+                Hoenn_Reborn.3dsx \
+                Hoenn_Reborn.elf \
+                Hoenn_Reborn.smdh \
+                Hoenn_Reborn.bnr
+            '
+
+      - name: Verify output
+        shell: bash
+        run: |
+          set -e
+
+          echo "Final build files:"
+
+          find . \
+            -maxdepth 3 \
+            -type f \
+            \( \
+              -name "*.cia" \
+              -o -name "*.3dsx" \
+              -o -name "*.elf" \
+            \) \
+            -print
+
+          CIA=$(find . -maxdepth 3 -name "*.cia" -print -quit)
+
+          if [ -z "$CIA" ]; then
+            echo "ERROR: No CIA was produced."
             exit 1
           fi
 
-          echo ""
-          echo "Hoenn Reborn project:"
-          echo "$PROJECT_ROOT"
-
-          echo ""
-          echo "HOENN_PROJECT=$PROJECT_ROOT" >> "$GITHUB_ENV"
-
-      - name: Verify project structure
-        shell: bash
-        run: |
-          set -e
-
-          PROJECT="$HOENN_PROJECT"
-
-          echo "======================================"
-          echo "VERIFYING PROJECT STRUCTURE"
-          echo "======================================"
-
-          test -f "$PROJECT/Makefile"
-          test -f "$PROJECT/cia.rsf"
-
-          test -f "$PROJECT/source/main.c"
-          test -f "$PROJECT/source/dashboard.c"
-          test -f "$PROJECT/source/game_data.c"
-          test -f "$PROJECT/source/gba_core_mgba.c"
-
-          test -d "$PROJECT/romfs/hoenn_reborn"
-
-          echo "PROJECT VERIFIED."
-
-      - name: Patch Hoenn Reborn Makefile
-        shell: bash
-        run: |
-          set -e
-
-          PROJECT="$HOENN_PROJECT"
-
-          python3 - "$PROJECT/Makefile" <<'PY'
-          from pathlib import Path
-          import sys
-
-          p = Path(sys.argv[1])
-
-          text = p.read_text()
-
-          text = text.replace(
-              "mgba-static",
-              "mgba"
-          )
-
-          p.write_text(text)
-
-          print("Hoenn Reborn Makefile patched.")
-          PY
-
-      - name: Build mGBA core
-        shell: bash
-        run: |
-          set -e
-
-          export DEVKITPRO=/opt/devkitpro
-          export DEVKITARM=/opt/devkitpro/devkitARM
-
-          export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
-          export PATH="/opt/devkitpro/tools/bin:$PATH"
-          export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
-
-          PROJECT="$HOENN_PROJECT"
-
-          mkdir -p \
-            "$PROJECT/mgba/build-hoenn-3ds"
-
-          echo "======================================"
-          echo "CONFIGURING mGBA"
-          echo "======================================"
-
-          arm-none-eabi-cmake \
-            -S "$GITHUB_WORKSPACE/mgba" \
-            -B "$PROJECT/mgba/build-hoenn-3ds" \
-            -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/mgba/src/platform/3ds/CMakeToolchain.txt" \
-            -D3DS=ON \
-            -DLIBMGBA_ONLY=ON \
-            -DBUILD_STATIC=ON \
-            -DBUILD_SHARED=OFF \
-            -DM_CORE_GBA=ON \
-            -DM_CORE_GB=OFF \
-            -DDISABLE_DEPS=ON \
-            -DBUILD_LTO=OFF
-
-          echo "======================================"
-          echo "BUILDING mGBA"
-          echo "======================================"
-
-          arm-none-eabi-cmake \
-            --build "$PROJECT/mgba/build-hoenn-3ds" \
-            -j2
-
-          echo ""
-          echo "Searching for libmgba.a..."
-
-          MGBA_LIB="$(
-            find "$PROJECT/mgba/build-hoenn-3ds" \
-              -name libmgba.a \
-              -print \
-              -quit
-          )"
-
-          if [ -z "$MGBA_LIB" ]; then
-            echo "ERROR: libmgba.a was not produced."
-
-            find "$PROJECT/mgba/build-hoenn-3ds" \
-              -type f \
-              -print
-
-            exit 1
-          fi
-
-          echo "mGBA library:"
-          echo "$MGBA_LIB"
-
-          if [ "$MGBA_LIB" != "$PROJECT/mgba/build-hoenn-3ds/libmgba.a" ]; then
-            cp \
-              "$MGBA_LIB" \
-              "$PROJECT/mgba/build-hoenn-3ds/libmgba.a"
-          fi
-
-          echo ""
-          echo "======================================"
-          echo "mGBA BUILD COMPLETE"
-          echo "======================================"
-
-      - name: Build Hoenn Reborn
-        shell: bash
-        run: |
-          set -e
-
-          export DEVKITPRO=/opt/devkitpro
-          export DEVKITARM=/opt/devkitpro/devkitARM
-
-          export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
-          export PATH="/opt/devkitpro/tools/bin:$PATH"
-          export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
-
-          cd "$HOENN_PROJECT"
-
-          echo "======================================"
-          echo "BUILDING HOENN REBORN"
-          echo "======================================"
-
-          pwd
-
-          make -j2
-
-          echo ""
-          echo "======================================"
-          echo "HOENN REBORN BUILD COMPLETE"
-          echo "======================================"
-
-      - name: Verify CIA
-        shell: bash
-        run: |
-          set -e
-
-          cd "$HOENN_PROJECT"
-
-          test -f Hoenn_Reborn.cia
-
-          echo "======================================"
-          echo "CIA BUILD SUCCESSFUL"
-          echo "======================================"
-
-          ls -lh Hoenn_Reborn.cia
-          wc -c Hoenn_Reborn.cia
-
-      - name: Verify 3DSX
-        shell: bash
-        run: |
-          set -e
-
-          cd "$HOENN_PROJECT"
-
-          test -f Hoenn_Reborn.3dsx
-
-          echo "======================================"
-          echo "3DSX BUILD SUCCESSFUL"
-          echo "======================================"
-
-          ls -lh Hoenn_Reborn.3dsx
-          wc -c Hoenn_Reborn.3dsx
-
-      - name: Verify ELF
-        shell: bash
-        run: |
-          set -e
-
-          cd "$HOENN_PROJECT"
-
-          test -f Hoenn_Reborn.elf
-
-          echo "======================================"
-          echo "ELF BUILD SUCCESSFUL"
-          echo "======================================"
-
-          ls -lh Hoenn_Reborn.elf
-          wc -c Hoenn_Reborn.elf
-
-      - name: Prepare build artifacts
-        shell: bash
-        run: |
-          set -e
-
-          rm -rf "$GITHUB_WORKSPACE/build-artifacts"
-
-          mkdir -p \
-            "$GITHUB_WORKSPACE/build-artifacts"
-
-          cp \
-            "$HOENN_PROJECT/Hoenn_Reborn.cia" \
-            "$GITHUB_WORKSPACE/build-artifacts/"
-
-          cp \
-            "$HOENN_PROJECT/Hoenn_Reborn.3dsx" \
-            "$GITHUB_WORKSPACE/build-artifacts/"
-
-          cp \
-            "$HOENN_PROJECT/Hoenn_Reborn.elf" \
-            "$GITHUB_WORKSPACE/build-artifacts/"
-
-          if [ -f "$HOENN_PROJECT/Hoenn_Reborn.smdh" ]; then
-            cp \
-              "$HOENN_PROJECT/Hoenn_Reborn.smdh" \
-              "$GITHUB_WORKSPACE/build-artifacts/"
-          fi
-
-          if [ -f "$HOENN_PROJECT/Hoenn_Reborn.bnr" ]; then
-            cp \
-              "$HOENN_PROJECT/Hoenn_Reborn.bnr" \
-              "$GITHUB_WORKSPACE/build-artifacts/"
-          fi
-
-          echo "Artifacts:"
-          ls -lh \
-            "$GITHUB_WORKSPACE/build-artifacts"
+          echo "CIA found:"
+          ls -lh "$CIA"
 
       - name: Upload CIA
         uses: actions/upload-artifact@v4
         with:
           name: Hoenn-Reborn-CIA
-          path: build-artifacts/Hoenn_Reborn.cia
-          if-no-files-found: error
-
-      - name: Upload 3DSX
-        uses: actions/upload-artifact@v4
-        with:
-          name: Hoenn-Reborn-3DSX
-          path: build-artifacts/Hoenn_Reborn.3dsx
-          if-no-files-found: error
-
-      - name: Upload ELF
-        uses: actions/upload-artifact@v4
-        with:
-          name: Hoenn-Reborn-ELF
-          path: build-artifacts/Hoenn_Reborn.elf
-          if-no-files-found: error
-
-      - name: Upload build files
-        uses: actions/upload-artifact@v4
-        with:
-          name: Hoenn-Reborn-Build-Files
-          path: build-artifacts/*
+          path: |
+            **/*.cia
+            **/*.3dsx
+            **/*.elf
           if-no-files-found: error
