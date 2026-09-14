@@ -423,7 +423,7 @@ jobs:
           echo "PATCHING CITRO2D 1.6.0"
           echo "======================================"
 
-          python3 \
+          python3 - \
             "$CITRO2D_ROOT/source/base.c" \
             "$CITRO2D_ROOT/include/c2d/base.h" <<'PY'
           from pathlib import Path
@@ -435,145 +435,91 @@ jobs:
           source_text = source.read_text()
           header_text = header.read_text()
 
-          # --------------------------------------------------
-          # SOURCE: C2D_Fade
-          # --------------------------------------------------
+          # ================================================
+          # C2D_Fade
+          # ================================================
 
           old = "void C2D_Fade(u32 color)"
           new = "bool C2D_Fade(u32 color)"
 
-          if old in source_text:
-              source_text = source_text.replace(old, new, 1)
-
-          # Make the inactive path valid for bool.
-          old = """void C2D_Fade(u32 color)
-          {
-              C2Di_Context* ctx = C2Di_GetContext();
-              if (!(ctx->flags & C2DiF_Active))
-                  return false;
-
-              ctx->flags |= C2DiF_DirtyFade;
-              ctx->fadeClr = color;
-          }"""
-
-          new = """bool C2D_Fade(u32 color)
-          {
-              C2Di_Context* ctx = C2Di_GetContext();
-              if (!(ctx->flags & C2DiF_Active))
-                  return false;
-
-              ctx->flags |= C2DiF_DirtyFade;
-              ctx->fadeClr = color;
-              return true;
-          }"""
-
-          if old in source_text:
-              source_text = source_text.replace(old, new, 1)
-          else:
-              # Fallback for whitespace differences.
-              marker = "ctx->fadeClr = color;"
-              pos = source_text.find(marker)
-
-              if pos == -1:
+          if old not in source_text:
+              if "bool C2D_Fade(u32 color)" not in source_text:
                   raise SystemExit(
-                      "ERROR: C2D_Fade body not found."
+                      "ERROR: C2D_Fade declaration not found."
                   )
+          else:
+              source_text = source_text.replace(
+                  old,
+                  new,
+                  1
+              )
 
-              end = pos + len(marker)
+          marker = "ctx->fadeClr = color;"
 
-              if "return true;" not in source_text[end:end+80]:
-                  source_text = (
-                      source_text[:end]
-                      + "\n\treturn true;"
-                      + source_text[end:]
-                  )
+          if marker not in source_text:
+              raise SystemExit(
+                  "ERROR: C2D_Fade body not found."
+              )
 
-          # --------------------------------------------------
-          # SOURCE: C2D_SetTintMode
-          # --------------------------------------------------
+          pos = source_text.find(marker)
+          end = pos + len(marker)
+
+          if "return true;" not in source_text[end:end + 100]:
+              source_text = (
+                  source_text[:end]
+                  + "\n\treturn true;"
+                  + source_text[end:]
+              )
+
+          # ================================================
+          # C2D_SetTintMode
+          # ================================================
 
           old = "void C2D_SetTintMode(C2D_TintMode mode)"
           new = "bool C2D_SetTintMode(C2D_TintMode mode)"
 
-          if old in source_text:
-              source_text = source_text.replace(old, new, 1)
-
-          old = """void C2D_SetTintMode(C2D_TintMode mode)
-          {
-              C2Di_Context* ctx = C2Di_GetContext();
-              if (!(ctx->flags & C2DiF_Active))
-                  return false;
-              u32 new_mode;
-              switch (mode)
-              {
-                  default:
-                  case C2D_TintSolid:
-                      new_mode = C2DiF_Mode_ImageSolid;
-                      break;
-                  case C2D_TintMult:
-                      new_mode = C2DiF_Mode_ImageMult;
-                      break;
-                  case C2D_TintLuma:
-                      new_mode = C2DiF_Mode_ImageLuma;
-                      break;
-              }
-
-              ctx->flags = (ctx->flags &~ C2DiF_TintMode_Mask) | (new_mode << (C2DiF_TintMode_Shift - C2DiF_Mode_Shift));
-          }"""
-
-          new = """bool C2D_SetTintMode(C2D_TintMode mode)
-          {
-              C2Di_Context* ctx = C2Di_GetContext();
-              if (!(ctx->flags & C2DiF_Active))
-                  return false;
-              u32 new_mode;
-              switch (mode)
-              {
-                  default:
-                  case C2D_TintSolid:
-                      new_mode = C2DiF_Mode_ImageSolid;
-                      break;
-                  case C2D_TintMult:
-                      new_mode = C2DiF_Mode_ImageMult;
-                      break;
-                  case C2D_TintLuma:
-                      new_mode = C2DiF_Mode_ImageLuma;
-                      break;
-              }
-
-              ctx->flags = (ctx->flags &~ C2DiF_TintMode_Mask) | (new_mode << (C2DiF_TintMode_Shift - C2DiF_Mode_Shift));
-              return true;
-          }"""
-
-          if old in source_text:
-              source_text = source_text.replace(old, new, 1)
+          if old not in source_text:
+              if "bool C2D_SetTintMode(C2D_TintMode mode)" not in source_text:
+                  raise SystemExit(
+                      "ERROR: C2D_SetTintMode declaration not found."
+                  )
           else:
-              marker = "ctx->flags = (ctx->flags &~ C2DiF_TintMode_Mask)"
-              pos = source_text.find(marker)
-
-              if pos == -1:
-                  raise SystemExit(
-                      "ERROR: C2D_SetTintMode body not found."
-                  )
-
-              line_end = source_text.find("\n", pos)
-
-              if line_end == -1:
-                  raise SystemExit(
-                      "ERROR: C2D_SetTintMode line not found."
-                  )
-
-              source_text = (
-                  source_text[:line_end]
-                  + "\n\treturn true;"
-                  + source_text[line_end:]
+              source_text = source_text.replace(
+                  old,
+                  new,
+                  1
               )
+
+          marker = (
+              "ctx->flags = (ctx->flags &~ C2DiF_TintMode_Mask) "
+              "| (new_mode << "
+              "(C2DiF_TintMode_Shift - C2DiF_Mode_Shift));"
+          )
+
+          if marker not in source_text:
+              raise SystemExit(
+                  "ERROR: C2D_SetTintMode body not found."
+              )
+
+          pos = source_text.find(marker)
+          end = pos + len(marker)
+
+          if "return true;" not in source_text[end:end + 100]:
+              source_text = (
+                  source_text[:end]
+                  + "\n\treturn true;"
+                  + source_text[end:]
+              )
+
+          # ================================================
+          # Write patched source
+          # ================================================
 
           source.write_text(source_text)
 
-          # --------------------------------------------------
-          # HEADER: change declarations to match the source.
-          # --------------------------------------------------
+          # ================================================
+          # Fix header declarations
+          # ================================================
 
           header_text = header_text.replace(
               "void C2D_Fade(u32 color);",
@@ -599,31 +545,29 @@ jobs:
           echo "======================================"
 
           echo ""
-          echo "Source declarations:"
-
+          echo "C2D_Fade source:"
           grep -n \
             "bool C2D_Fade" \
             "$CITRO2D_ROOT/source/base.c"
 
+          echo ""
+          echo "C2D_SetTintMode source:"
           grep -n \
             "bool C2D_SetTintMode" \
             "$CITRO2D_ROOT/source/base.c"
 
           echo ""
           echo "Header declarations:"
-
           grep -n \
-            "bool C2D_Fade" \
-            "$CITRO2D_ROOT/include/c2d/base.h"
-
-          grep -n \
-            "bool C2D_SetTintMode" \
+            "bool C2D_Fade\|bool C2D_SetTintMode" \
             "$CITRO2D_ROOT/include/c2d/base.h"
 
           echo ""
-          echo "Checking final return statements:"
+          echo "======================================"
+          echo "CHECKING CITRO2D SOURCE"
+          echo "======================================"
 
-          sed -n '284,320p' \
+          sed -n '284,325p' \
             "$CITRO2D_ROOT/source/base.c"
 
           echo ""
