@@ -114,7 +114,7 @@ jobs:
             /tmp/catnip/opt/devkitpro/. \
             /opt/devkitpro/
 
-          echo "Searching installed CMake/Catnip files..."
+          echo "Searching installed files..."
 
           find /opt/devkitpro \
             -type f \
@@ -164,10 +164,10 @@ jobs:
             exit 1
           fi
 
+          chmod +x "$CMAKE3DS"
+
           echo "Found:"
           echo "$CMAKE3DS"
-
-          chmod +x "$CMAKE3DS"
 
           "$CMAKE3DS" --version
 
@@ -448,9 +448,6 @@ jobs:
           echo "PATCHING LIBCTRU"
           echo "======================================"
 
-          echo "File:"
-          echo "$GDBHIO_FILE"
-
           python3 - "$GDBHIO_FILE" <<'PY'
           from pathlib import Path
           import re
@@ -560,15 +557,6 @@ jobs:
 
       # ============================================================
       # BUILD CITRO2D
-      #
-      # IMPORTANT:
-      # We use CATNIP here instead of directly invoking CMake.
-      #
-      # citro2d 1.7.0 uses:
-      #
-      # ctr_add_shader_library()
-      #
-      # which requires the devkitPro CMake/Catnip integration.
       # ============================================================
 
       - name: Build citro2d
@@ -624,8 +612,6 @@ jobs:
           echo "======================================"
 
           command -v arm-none-eabi-cmake
-
-          arm-none-eabi-cmake --version
 
           echo "======================================"
           echo "BUILDING CITRO2D WITH CATNIP"
@@ -702,43 +688,79 @@ jobs:
 
 
       # ============================================================
-      # PATCH HOENN REBORN MAKEFILE
+      # LOCATE HOENN REBORN PROJECT
+      #
+      # The repository contains the project in a nested directory.
+      # We locate it automatically by finding source/main.c.
       # ============================================================
 
-      - name: Patch Hoenn Reborn Makefile
+      - name: Locate Hoenn Reborn project
         shell: bash
         run: |
           set -e
 
-          python3 - <<'PY'
-          from pathlib import Path
+          echo "======================================"
+          echo "SEARCHING FOR HOENN REBORN PROJECT"
+          echo "======================================"
 
-          p = Path("Makefile")
+          MAIN_FILE="$(
+            find "$GITHUB_WORKSPACE" \
+              -type f \
+              -path '*/source/main.c' \
+              -print \
+              -quit
+          )"
 
-          if not p.exists():
-              raise SystemExit("Makefile not found")
+          if [ -z "$MAIN_FILE" ]; then
+            echo "ERROR: source/main.c was not found."
+            echo ""
+            echo "Repository contents:"
+            find "$GITHUB_WORKSPACE" \
+              -maxdepth 4 \
+              -type f \
+              -print
+            exit 1
+          fi
 
-          text = p.read_text()
+          PROJECT_ROOT="$(dirname "$(dirname "$MAIN_FILE")")"
 
-          text = text.replace(
-              "mgba-static",
-              "mgba"
-          )
+          echo "Found source/main.c:"
+          echo "$MAIN_FILE"
 
-          p.write_text(text)
+          echo ""
+          echo "Hoenn Reborn project root:"
+          echo "$PROJECT_ROOT"
 
-          print("Hoenn Reborn Makefile patched.")
-          PY
+          test -f "$PROJECT_ROOT/Makefile"
+          test -f "$PROJECT_ROOT/cia.rsf"
+
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+
+          echo "======================================"
+          echo "HOENN REBORN PROJECT FOUND"
+          echo "======================================"
 
 
       # ============================================================
-      # VERIFY PROJECT FILES
+      # SHOW PROJECT STRUCTURE
       # ============================================================
 
-      - name: Verify project files
+      - name: Verify project structure
         shell: bash
         run: |
           set -e
+
+          echo "======================================"
+          echo "PROJECT ROOT"
+          echo "======================================"
+
+          echo "$PROJECT_ROOT"
+
+          echo "======================================"
+          echo "PROJECT FILES"
+          echo "======================================"
+
+          cd "$PROJECT_ROOT"
 
           test -f Makefile
           test -f cia.rsf
@@ -754,9 +776,74 @@ jobs:
           echo "PROJECT FILES VERIFIED"
           echo "======================================"
 
+          ls -lh Makefile
+          ls -lh cia.rsf
+
+          echo ""
+          echo "Source files:"
+          ls -lh source/
+
+          echo ""
+          echo "ROMFS:"
+          find romfs/hoenn_reborn \
+            -maxdepth 1 \
+            -type f \
+            -print
+
 
       # ============================================================
-      # BUILD MGBA + HOENN REBORN
+      # PATCH HOENN REBORN MAKEFILE
+      # ============================================================
+
+      - name: Patch Hoenn Reborn Makefile
+        shell: bash
+        run: |
+          set -e
+
+          echo "======================================"
+          echo "PATCHING HOENN REBORN MAKEFILE"
+          echo "======================================"
+
+          echo "Project root:"
+          echo "$PROJECT_ROOT"
+
+          cd "$PROJECT_ROOT"
+
+          test -f Makefile
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("Makefile")
+
+          text = p.read_text()
+
+          if "mgba-static" in text:
+              text = text.replace(
+                  "mgba-static",
+                  "mgba"
+              )
+
+              p.write_text(text)
+
+              print("Changed mgba-static -> mgba")
+
+          else:
+              print("No mgba-static reference found.")
+              print("Makefile may already be patched.")
+          PY
+
+          echo ""
+          echo "Checking Makefile:"
+          grep -n "MGBA" Makefile || true
+
+          echo "======================================"
+          echo "MAKEFILE PATCH COMPLETE"
+          echo "======================================"
+
+
+      # ============================================================
+      # BUILD HOENN REBORN
       # ============================================================
 
       - name: Build Hoenn Reborn
@@ -772,28 +859,27 @@ jobs:
           export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
 
           echo "======================================"
-          echo "DEVKITPRO"
+          echo "HOENN REBORN BUILD"
           echo "======================================"
 
-          echo "$DEVKITPRO"
+          echo "Project root:"
+          echo "$PROJECT_ROOT"
 
-          echo "======================================"
-          echo "DEVKITARM"
-          echo "======================================"
+          cd "$PROJECT_ROOT"
 
-          echo "$DEVKITARM"
-
-          echo "======================================"
-          echo "ARM COMPILER"
-          echo "======================================"
-
+          echo ""
+          echo "Compiler:"
           arm-none-eabi-gcc --version
 
-          echo "======================================"
-          echo "STARTING HOENN REBORN BUILD"
-          echo "======================================"
+          echo ""
+          echo "Starting build..."
 
           make -j2
+
+          echo ""
+          echo "======================================"
+          echo "HOENN REBORN MAKE COMPLETE"
+          echo "======================================"
 
 
       # ============================================================
@@ -804,6 +890,8 @@ jobs:
         shell: bash
         run: |
           set -e
+
+          cd "$PROJECT_ROOT"
 
           test -f Hoenn_Reborn.cia
 
@@ -824,6 +912,8 @@ jobs:
         run: |
           set -e
 
+          cd "$PROJECT_ROOT"
+
           test -f Hoenn_Reborn.3dsx
 
           echo "======================================"
@@ -843,6 +933,8 @@ jobs:
         run: |
           set -e
 
+          cd "$PROJECT_ROOT"
+
           test -f Hoenn_Reborn.elf
 
           echo "======================================"
@@ -861,7 +953,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Hoenn-Reborn-CIA
-          path: Hoenn_Reborn.cia
+          path: ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.cia
           if-no-files-found: error
 
 
@@ -873,7 +965,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Hoenn-Reborn-3DSX
-          path: Hoenn_Reborn.3dsx
+          path: ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.3dsx
           if-no-files-found: error
 
 
@@ -885,7 +977,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Hoenn-Reborn-ELF
-          path: Hoenn_Reborn.elf
+          path: ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.elf
           if-no-files-found: error
 
 
@@ -898,9 +990,9 @@ jobs:
         with:
           name: Hoenn-Reborn-Build-Files
           path: |
-            Hoenn_Reborn.cia
-            Hoenn_Reborn.3dsx
-            Hoenn_Reborn.elf
-            Hoenn_Reborn.smdh
-            Hoenn_Reborn.bnr
+            ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.cia
+            ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.3dsx
+            ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.elf
+            ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.smdh
+            ${{ env.PROJECT_ROOT }}/Hoenn_Reborn.bnr
           if-no-files-found: warn
