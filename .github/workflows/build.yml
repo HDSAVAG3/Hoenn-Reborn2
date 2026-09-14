@@ -415,13 +415,84 @@ jobs:
           CITRO2D_ROOT="/tmp/citro2d/citro2d-1.6.0"
 
           test -f "$CITRO2D_ROOT/Makefile"
-
-          echo ""
-          echo "citro2d Makefile found."
+          test -f "$CITRO2D_ROOT/source/base.c"
 
           echo ""
           echo "======================================"
-          echo "BUILDING CITRO2D 1.6.0"
+          echo "PATCHING CITRO2D 1.6.0"
+          echo "======================================"
+
+          python3 - "$CITRO2D_ROOT/source/base.c" <<'PY'
+          from pathlib import Path
+          import sys
+
+          p = Path(sys.argv[1])
+          text = p.read_text()
+
+          # --------------------------------------------------
+          # Fix C2D_Fade return type
+          # --------------------------------------------------
+
+          text = text.replace(
+              "void C2D_Fade(u32 color)",
+              "bool C2D_Fade(u32 color)"
+          )
+
+          # --------------------------------------------------
+          # Fix C2D_SetTintMode return type
+          # --------------------------------------------------
+
+          text = text.replace(
+              "void C2D_SetTintMode(C2D_TintMode mode)",
+              "bool C2D_SetTintMode(C2D_TintMode mode)"
+          )
+
+          # --------------------------------------------------
+          # Fix old-style return statements.
+          #
+          # Newer GCC rejects:
+          #
+          #     void function()
+          #     {
+          #         return false;
+          #     }
+          #
+          # Change those functions to bool and preserve
+          # their existing return values.
+          # --------------------------------------------------
+
+          if "bool C2D_Fade(u32 color)" not in text:
+              raise SystemExit(
+                  "ERROR: C2D_Fade declaration was not found."
+              )
+
+          if "bool C2D_SetTintMode(C2D_TintMode mode)" not in text:
+              raise SystemExit(
+                  "ERROR: C2D_SetTintMode declaration was not found."
+              )
+
+          p.write_text(text)
+
+          print("C2D_Fade patched.")
+          print("C2D_SetTintMode patched.")
+          PY
+
+          echo ""
+          echo "======================================"
+          echo "CHECKING PATCH"
+          echo "======================================"
+
+          grep -n \
+            "bool C2D_Fade" \
+            "$CITRO2D_ROOT/source/base.c"
+
+          grep -n \
+            "bool C2D_SetTintMode" \
+            "$CITRO2D_ROOT/source/base.c"
+
+          echo ""
+          echo "======================================"
+          echo "BUILDING CITRO2D"
           echo "======================================"
 
           cd "$CITRO2D_ROOT"
