@@ -24,14 +24,26 @@ jobs:
         run: |
           set -e
           sudo apt-get update
-          sudo apt-get install -y wget curl git cmake make python3 unzip xz-utils zstd p7zip-full
+          sudo apt-get install -y \
+            wget \
+            curl \
+            git \
+            cmake \
+            make \
+            python3 \
+            unzip \
+            xz-utils \
+            zstd \
+            p7zip-full
 
-      - name: Check project
+      - name: Prepare project
         shell: bash
         run: |
           set -e
 
-          echo "Checking repository..."
+          echo "========================================"
+          echo "Checking project"
+          echo "========================================"
 
           if [ -f "Makefile" ]; then
             echo "Makefile found."
@@ -45,25 +57,20 @@ jobs:
           fi
 
           if [ ! -f "Makefile" ]; then
-            echo "ERROR: Hoenn Reborn Makefile was not found."
+            echo "ERROR: Makefile not found."
             find . -maxdepth 3 -type f | sort | head -200
             exit 1
           fi
 
-          echo "Project is ready."
+          echo "Project ready."
 
-      - name: Build everything
+      - name: Create Docker build script
         shell: bash
         run: |
           set -e
 
-          docker pull devkitpro/devkitarm:latest
-
-          docker run --rm \
-            -v "$GITHUB_WORKSPACE:/work" \
-            -w /work \
-            devkitpro/devkitarm:latest \
-            bash -s <<'BUILD_SCRIPT'
+          cat > build-inside.sh <<'BUILD_SCRIPT'
+          #!/usr/bin/env bash
 
           set -e
 
@@ -72,24 +79,102 @@ jobs:
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
 
           echo "========================================"
-          echo "Checking devkitARM"
+          echo "INSIDE DEVKITARM CONTAINER"
           echo "========================================"
+
+          echo "DEVKITPRO=$DEVKITPRO"
+          echo "DEVKITARM=$DEVKITARM"
 
           "$DEVKITARM/bin/arm-none-eabi-gcc" --version
 
           echo "========================================"
-          echo "Preparing 3DS libraries"
+          echo "Installing 3DS packaging tools"
           echo "========================================"
 
-          mkdir -p /tmp/3ds-libs
-          cd /tmp/3ds-libs
+          mkdir -p /tmp/tools
+
+          cd /tmp/tools
+
+          wget -q \
+            https://github.com/Steveice10/bannertool/releases/download/1.2.2/bannertool.zip \
+            -O bannertool.zip
+
+          unzip -o bannertool.zip
+
+          BANNERTOOL=$(find /tmp/tools -type f -name bannertool | head -1)
+
+          if [ -z "$BANNERTOOL" ]; then
+            echo "ERROR: bannertool was not found."
+            find /tmp/tools -maxdepth 4 -type f
+            exit 1
+          fi
+
+          chmod +x "$BANNERTOOL"
+
+          cp "$BANNERTOOL" "$DEVKITPRO/tools/bin/bannertool"
+
+          wget -q \
+            https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip \
+            -O makerom.zip
+
+          unzip -o makerom.zip
+
+          MAKEROM=$(find /tmp/tools -type f -name makerom | head -1)
+
+          if [ -z "$MAKEROM" ]; then
+            echo "ERROR: makerom was not found."
+            find /tmp/tools -maxdepth 4 -type f
+            exit 1
+          fi
+
+          chmod +x "$MAKEROM"
+
+          cp "$MAKEROM" "$DEVKITPRO/tools/bin/makerom"
+
+          echo "bannertool:"
+          bannertool --help >/dev/null 2>&1 || true
+
+          echo "makerom:"
+          makerom -h >/dev/null 2>&1 || true
+
+          echo "========================================"
+          echo "Installing tex3ds"
+          echo "========================================"
+
+          cd /tmp/tools
+
+          rm -rf tex3ds
+
+          git clone -q \
+            --depth 1 \
+            --branch v2.3.0 \
+            https://github.com/devkitPro/tex3ds.git \
+            tex3ds
+
+          cd tex3ds
+
+          ./autogen.sh
+
+          ./configure \
+            --prefix="$DEVKITPRO/tools"
+
+          make -j2
+
+          make install
+
+          export PATH="$DEVKITPRO/tools/bin:$PATH"
+
+          echo "tex3ds:"
+          command -v tex3ds
+          tex3ds --version || true
 
           echo "========================================"
           echo "Building libctru"
           echo "========================================"
 
+          cd /tmp
+
           rm -rf libctru-2.7.0
-          rm -f libctru.tar.gz
 
           wget -q \
             https://github.com/devkitPro/libctru/archive/refs/tags/v2.7.0.tar.gz \
@@ -104,6 +189,7 @@ jobs:
             source/gdbhio.c
 
           make -j2
+
           make install
 
           echo "libctru complete."
@@ -112,10 +198,9 @@ jobs:
           echo "Building citro3d"
           echo "========================================"
 
-          cd /tmp/3ds-libs
+          cd /tmp
 
           rm -rf citro3d-1.7.1
-          rm -f citro3d.tar.gz
 
           wget -q \
             https://github.com/devkitPro/citro3d/archive/refs/tags/v1.7.1.tar.gz \
@@ -126,6 +211,7 @@ jobs:
           cd citro3d-1.7.1
 
           make -j2
+
           make install
 
           echo "citro3d complete."
@@ -134,10 +220,9 @@ jobs:
           echo "Building citro2d"
           echo "========================================"
 
-          cd /tmp/3ds-libs
+          cd /tmp
 
           rm -rf citro2d-1.6.0
-          rm -f citro2d.tar.gz
 
           wget -q \
             https://github.com/devkitPro/citro2d/archive/refs/tags/v1.6.0.tar.gz \
@@ -146,8 +231,6 @@ jobs:
           tar -xzf citro2d.tar.gz
 
           cd citro2d-1.6.0
-
-          echo "Patching citro2d..."
 
           sed -i \
             's/void C2D_Fade(u32 color)/bool C2D_Fade(u32 color)/' \
@@ -174,6 +257,7 @@ jobs:
             source/base.c
 
           make -j2
+
           make install
 
           echo "citro2d complete."
@@ -192,9 +276,10 @@ jobs:
             -O mgba.tar.gz
 
           tar -xzf mgba.tar.gz
+
           mv mgba-0.10.5 mgba
 
-          echo "Patching mGBA..."
+          echo "Patching mGBA GBA-only GUI..."
 
           CONFIG="mgba/src/feature/gui/gui-config.c"
 
@@ -210,7 +295,7 @@ jobs:
 
           fi
 
-          echo "mGBA configuration patched."
+          echo "mGBA patch complete."
 
           echo "========================================"
           echo "Configuring mGBA"
@@ -240,15 +325,17 @@ jobs:
             --target mgba \
             -j2
 
-          echo "Finding mGBA library..."
-
           MGBA_LIB=$(find mgba/build-hoenn-3ds \
             -name "libmgba.a" \
             -print -quit)
 
           if [ -z "$MGBA_LIB" ]; then
-            echo "ERROR: mGBA library was not produced."
-            find mgba/build-hoenn-3ds -name "*.a" -print
+            echo "ERROR: libmgba.a was not produced."
+
+            find mgba/build-hoenn-3ds \
+              -name "*.a" \
+              -print
+
             exit 1
           fi
 
@@ -257,23 +344,27 @@ jobs:
           cp "$MGBA_LIB" \
             mgba/build-hoenn-3ds/lib/libmgba-static.a
 
-          echo "mGBA library:"
-          ls -lh mgba/build-hoenn-3ds/lib/libmgba-static.a
+          echo "mGBA library created."
+
+          ls -lh \
+            mgba/build-hoenn-3ds/lib/libmgba-static.a
 
           echo "========================================"
-          echo "Preparing Hoenn Reborn"
+          echo "Preparing project"
           echo "========================================"
 
-          sed -i 's/mgba-static/mgba/g' Makefile
+          sed -i \
+            's/mgba-static/mgba/g' \
+            Makefile
 
           echo "========================================"
-          echo "Project Makefile"
+          echo "PROJECT MAKEFILE"
           echo "========================================"
 
-          sed -n '1,220p' Makefile
+          sed -n '1,240p' Makefile
 
           echo "========================================"
-          echo "Building Hoenn Reborn"
+          echo "BUILDING HOENN REBORN"
           echo "========================================"
 
           make clean || true
@@ -281,28 +372,78 @@ jobs:
           make -j2
 
           echo "========================================"
-          echo "BUILD FINISHED"
+          echo "BUILD COMPLETE"
           echo "========================================"
 
-          find . -maxdepth 3 -type f \
-            \( -name "*.cia" -o -name "*.3dsx" -o -name "*.elf" \) \
+          find . \
+            -maxdepth 4 \
+            -type f \
+            \( \
+              -name "*.cia" \
+              -o -name "*.3dsx" \
+              -o -name "*.elf" \
+            \) \
             -print
 
           BUILD_SCRIPT
+
+          chmod +x build-inside.sh
+
+          echo "Created build-inside.sh:"
+          ls -lh build-inside.sh
+
+      - name: Run build inside devkitARM
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "STARTING DOCKER BUILD"
+          echo "========================================"
+
+          docker pull devkitpro/devkitarm:latest
+
+          docker run \
+            --rm \
+            -v "$GITHUB_WORKSPACE:/work" \
+            -w /work \
+            devkitpro/devkitarm:latest \
+            bash /work/build-inside.sh
 
       - name: Verify CIA
         shell: bash
         run: |
           set -e
 
-          CIA=$(find . -maxdepth 3 -name "*.cia" -print -quit)
+          echo "========================================"
+          echo "SEARCHING FOR CIA"
+          echo "========================================"
+
+          find . \
+            -maxdepth 5 \
+            -type f \
+            \( \
+              -name "*.cia" \
+              -o -name "*.3dsx" \
+              -o -name "*.elf" \
+            \) \
+            -print
+
+          CIA=$(find . \
+            -maxdepth 5 \
+            -name "*.cia" \
+            -print \
+            -quit)
 
           if [ -z "$CIA" ]; then
             echo "ERROR: No CIA file was produced."
             exit 1
           fi
 
-          echo "CIA successfully produced:"
+          echo "========================================"
+          echo "CIA FOUND"
+          echo "========================================"
+
           ls -lh "$CIA"
 
       - name: Upload build
