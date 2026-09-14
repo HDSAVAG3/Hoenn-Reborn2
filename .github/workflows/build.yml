@@ -38,6 +38,7 @@ jobs:
           elif [ -f "Hoenn_Reborn_GitHub_Build.zip" ]; then
             echo "Project ZIP found."
             unzip -o "Hoenn_Reborn_GitHub_Build.zip"
+
             if [ -f "Hoenn_Reborn_GitHub_Build/Makefile" ]; then
               cp -a Hoenn_Reborn_GitHub_Build/. .
             fi
@@ -62,199 +63,232 @@ jobs:
             -v "$GITHUB_WORKSPACE:/work" \
             -w /work \
             devkitpro/devkitarm:latest \
-            bash -lc '
+            bash -s <<'BUILD_SCRIPT'
 
-              set -e
+          set -e
 
-              export DEVKITPRO=/opt/devkitpro
-              export DEVKITARM=/opt/devkitpro/devkitARM
-              export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
+          export DEVKITPRO=/opt/devkitpro
+          export DEVKITARM=/opt/devkitpro/devkitARM
+          export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
 
-              echo "========================================"
-              echo "Checking devkitARM"
-              echo "========================================"
+          echo "========================================"
+          echo "Checking devkitARM"
+          echo "========================================"
 
-              "$DEVKITARM/bin/arm-none-eabi-gcc" --version
+          "$DEVKITARM/bin/arm-none-eabi-gcc" --version
 
-              echo "========================================"
-              echo "Preparing 3DS libraries"
-              echo "========================================"
+          echo "========================================"
+          echo "Preparing 3DS libraries"
+          echo "========================================"
 
-              mkdir -p /tmp/3ds-libs
-              cd /tmp/3ds-libs
+          mkdir -p /tmp/3ds-libs
+          cd /tmp/3ds-libs
 
-              echo "========================================"
-              echo "Building libctru"
-              echo "========================================"
+          echo "========================================"
+          echo "Building libctru"
+          echo "========================================"
 
-              rm -rf libctru-2.7.0
-              rm -f libctru.tar.gz
+          rm -rf libctru-2.7.0
+          rm -f libctru.tar.gz
 
-              wget -q \
-                https://github.com/devkitPro/libctru/archive/refs/tags/v2.7.0.tar.gz \
-                -O libctru.tar.gz
+          wget -q \
+            https://github.com/devkitPro/libctru/archive/refs/tags/v2.7.0.tar.gz \
+            -O libctru.tar.gz
 
-              tar -xzf libctru.tar.gz
+          tar -xzf libctru.tar.gz
 
-              cd libctru-2.7.0/libctru
+          cd libctru-2.7.0/libctru
 
-              sed -i \
-                "s/gdbhio_mode_t gdbMode = 0;/gdbhio_mode_t gdbMode __attribute__((unused)) = 0;/" \
-                source/gdbhio.c
+          sed -i \
+            's/gdbhio_mode_t gdbMode = 0;/gdbhio_mode_t gdbMode __attribute__((unused)) = 0;/' \
+            source/gdbhio.c
 
-              make -j2
-              make install
+          make -j2
+          make install
 
-              echo "libctru complete."
+          echo "libctru complete."
 
-              echo "========================================"
-              echo "Building citro3d"
-              echo "========================================"
+          echo "========================================"
+          echo "Building citro3d"
+          echo "========================================"
 
-              cd /tmp/3ds-libs
+          cd /tmp/3ds-libs
 
-              rm -rf citro3d-1.7.1
-              rm -f citro3d.tar.gz
+          rm -rf citro3d-1.7.1
+          rm -f citro3d.tar.gz
 
-              wget -q \
-                https://github.com/devkitPro/citro3d/archive/refs/tags/v1.7.1.tar.gz \
-                -O citro3d.tar.gz
+          wget -q \
+            https://github.com/devkitPro/citro3d/archive/refs/tags/v1.7.1.tar.gz \
+            -O citro3d.tar.gz
 
-              tar -xzf citro3d.tar.gz
+          tar -xzf citro3d.tar.gz
 
-              cd citro3d-1.7.1
+          cd citro3d-1.7.1
 
-              make -j2
-              make install
+          make -j2
+          make install
 
-              echo "citro3d complete."
+          echo "citro3d complete."
 
-              echo "========================================"
-              echo "Building citro2d"
-              echo "========================================"
+          echo "========================================"
+          echo "Building citro2d"
+          echo "========================================"
 
-              cd /tmp/3ds-libs
+          cd /tmp/3ds-libs
 
-              rm -rf citro2d-1.6.0
-              rm -f citro2d.tar.gz
+          rm -rf citro2d-1.6.0
+          rm -f citro2d.tar.gz
 
-              wget -q \
-                https://github.com/devkitPro/citro2d/archive/refs/tags/v1.6.0.tar.gz \
-                -O citro2d.tar.gz
+          wget -q \
+            https://github.com/devkitPro/citro2d/archive/refs/tags/v1.6.0.tar.gz \
+            -O citro2d.tar.gz
 
-              tar -xzf citro2d.tar.gz
+          tar -xzf citro2d.tar.gz
 
-              cd citro2d-1.6.0
+          cd citro2d-1.6.0
 
-              sed -i \
-                "s/void C2D_Fade(u32 color)/bool C2D_Fade(u32 color)/" \
-                source/base.c
+          echo "Patching citro2d..."
 
-              sed -i \
-                "s/void C2D_SetTintMode(C2D_TintMode mode)/bool C2D_SetTintMode(C2D_TintMode mode)/" \
-                source/base.c
+          sed -i \
+            's/void C2D_Fade(u32 color)/bool C2D_Fade(u32 color)/' \
+            source/base.c
 
-              sed -i \
-                "/ctx->fadeClr = color;/a\\    return true;" \
-                source/base.c
+          sed -i \
+            's/void C2D_SetTintMode(C2D_TintMode mode)/bool C2D_SetTintMode(C2D_TintMode mode)/' \
+            source/base.c
 
-              sed -i \
-                "/ctx->flags = (ctx->flags &~ C2DiF_TintMode_Mask) | (new_mode << (C2DiF_TintMode_Shift - C2DiF_Mode_Shift));/a\\    return true;" \
-                source/base.c
+          sed -i \
+            's/void C2D_Fade(u32 color)/bool C2D_Fade(u32 color)/' \
+            include/citro2d.h
 
-              sed -i \
-                "s/void C2D_Fade(u32 color)/bool C2D_Fade(u32 color)/" \
-                include/citro2d.h
+          sed -i \
+            's/void C2D_SetTintMode(C2D_TintMode mode)/bool C2D_SetTintMode(C2D_TintMode mode)/' \
+            include/citro2d.h
 
-              sed -i \
-                "s/void C2D_SetTintMode(C2D_TintMode mode)/bool C2D_SetTintMode(C2D_TintMode mode)/" \
-                include/citro2d.h
+          sed -i \
+            '/ctx->fadeClr = color;/a\    return true;' \
+            source/base.c
 
-              make -j2
-              make install
+          sed -i \
+            '/ctx->flags = (ctx->flags \&~ C2DiF_TintMode_Mask) | (new_mode << (C2DiF_TintMode_Shift - C2DiF_Mode_Shift));/a\    return true;' \
+            source/base.c
 
-              echo "citro2d complete."
+          make -j2
+          make install
 
-              echo "========================================"
-              echo "Building mGBA 0.10.5"
-              echo "========================================"
+          echo "citro2d complete."
 
-              cd /work
+          echo "========================================"
+          echo "Building mGBA 0.10.5"
+          echo "========================================"
 
-              rm -rf mgba
-              rm -f mgba.tar.gz
+          cd /work
 
-              wget -q \
-                https://github.com/mgba-emu/mgba/archive/refs/tags/0.10.5.tar.gz \
-                -O mgba.tar.gz
+          rm -rf mgba
+          rm -f mgba.tar.gz
 
-              tar -xzf mgba.tar.gz
-              mv mgba-0.10.5 mgba
+          wget -q \
+            https://github.com/mgba-emu/mgba/archive/refs/tags/0.10.5.tar.gz \
+            -O mgba.tar.gz
 
-              echo "Patching mGBA GBA-only configuration..."
+          tar -xzf mgba.tar.gz
+          mv mgba-0.10.5 mgba
 
-              python3 -c "from pathlib import Path; p=Path(\"mgba/src/feature/gui/gui-config.c\"); s=p.read_text(); old='''            if (gbBiosPath[0]) {\\n                mCoreConfigSetValue(&runner->config, \"gb.bios\", gbBiosPath);\\n            }\\n            if (gbcBiosPath[0]) {\\n                mCoreConfigSetValue(&runner->config, \"gbc.bios\", gbcBiosPath);\\n            }\\n            if (sgbBiosPath[0]) {\\n                mCoreConfigSetValue(&runner->config, \"sgb.bios\", sgbBiosPath);\\n            }\\n'''; new='''#ifdef M_CORE_GB\\n            if (gbBiosPath[0]) {\\n                mCoreConfigSetValue(&runner->config, \"gb.bios\", gbBiosPath);\\n            }\\n            if (gbcBiosPath[0]) {\\n                mCoreConfigSetValue(&runner->config, \"gbc.bios\", gbcBiosPath);\\n            }\\n            if (sgbBiosPath[0]) {\\n                mCoreConfigSetValue(&runner->config, \"sgb.bios\", sgbBiosPath);\\n            }\\n#endif\\n'''; p.write_text(s.replace(old,new))"
+          echo "Patching mGBA..."
 
-              rm -rf mgba/build-hoenn-3ds
+          CONFIG="mgba/src/feature/gui/gui-config.c"
 
-              cmake \
-                -S mgba \
-                -B mgba/build-hoenn-3ds \
-                -DCMAKE_TOOLCHAIN_FILE="$DEVKITARM/3ds/CMakeToolchain.txt" \
-                -D3DS=ON \
-                -DLIBMGBA_ONLY=ON \
-                -DBUILD_STATIC=ON \
-                -DBUILD_SHARED=OFF \
-                -DM_CORE_GBA=ON \
-                -DM_CORE_GB=OFF \
-                -DDISABLE_DEPS=ON \
-                -DBUILD_LTO=OFF
+          if [ -f "$CONFIG" ]; then
 
-              cmake \
-                --build mgba/build-hoenn-3ds \
-                --target mgba \
-                -j2
+            sed -i \
+              '/if (gbBiosPath\[0\])/i #ifdef M_CORE_GB' \
+              "$CONFIG"
 
-              MGBA_LIB=$(find mgba/build-hoenn-3ds -name "libmgba.a" -print -quit)
+            sed -i \
+              '/mCoreConfigSetValue(&runner->config, "sgb.bios", sgbBiosPath);/a #endif' \
+              "$CONFIG"
 
-              if [ -z "$MGBA_LIB" ]; then
-                echo "ERROR: mGBA library was not produced."
-                exit 1
-              fi
+          fi
 
-              mkdir -p mgba/build-hoenn-3ds/lib
-              cp "$MGBA_LIB" mgba/build-hoenn-3ds/lib/libmgba-static.a
+          echo "mGBA configuration patched."
 
-              echo "mGBA library created:"
-              ls -lh mgba/build-hoenn-3ds/lib/libmgba-static.a
+          echo "========================================"
+          echo "Configuring mGBA"
+          echo "========================================"
 
-              echo "========================================"
-              echo "Preparing Hoenn Reborn"
-              echo "========================================"
+          rm -rf mgba/build-hoenn-3ds
 
-              sed -i "s/mgba-static/mgba/g" Makefile
+          cmake \
+            -S mgba \
+            -B mgba/build-hoenn-3ds \
+            -DCMAKE_TOOLCHAIN_FILE="$DEVKITARM/3ds/CMakeToolchain.txt" \
+            -D3DS=ON \
+            -DLIBMGBA_ONLY=ON \
+            -DBUILD_STATIC=ON \
+            -DBUILD_SHARED=OFF \
+            -DM_CORE_GBA=ON \
+            -DM_CORE_GB=OFF \
+            -DDISABLE_DEPS=ON \
+            -DBUILD_LTO=OFF
 
-              echo "========================================"
-              echo "Makefile"
-              echo "========================================"
+          echo "========================================"
+          echo "Compiling mGBA"
+          echo "========================================"
 
-              sed -n "1,220p" Makefile
+          cmake \
+            --build mgba/build-hoenn-3ds \
+            --target mgba \
+            -j2
 
-              echo "========================================"
-              echo "Building Hoenn Reborn"
-              echo "========================================"
+          echo "Finding mGBA library..."
 
-              make clean || true
-              make -j2
+          MGBA_LIB=$(find mgba/build-hoenn-3ds \
+            -name "libmgba.a" \
+            -print -quit)
 
-              echo "========================================"
-              echo "BUILD FINISHED"
-              echo "========================================"
+          if [ -z "$MGBA_LIB" ]; then
+            echo "ERROR: mGBA library was not produced."
+            find mgba/build-hoenn-3ds -name "*.a" -print
+            exit 1
+          fi
 
-              find . -maxdepth 3 -type f \
-                \( -name "*.cia" -o -name "*.3dsx" -o -name "*.elf" \) \
-                -print
-            '
+          mkdir -p mgba/build-hoenn-3ds/lib
+
+          cp "$MGBA_LIB" \
+            mgba/build-hoenn-3ds/lib/libmgba-static.a
+
+          echo "mGBA library:"
+          ls -lh mgba/build-hoenn-3ds/lib/libmgba-static.a
+
+          echo "========================================"
+          echo "Preparing Hoenn Reborn"
+          echo "========================================"
+
+          sed -i 's/mgba-static/mgba/g' Makefile
+
+          echo "========================================"
+          echo "Project Makefile"
+          echo "========================================"
+
+          sed -n '1,220p' Makefile
+
+          echo "========================================"
+          echo "Building Hoenn Reborn"
+          echo "========================================"
+
+          make clean || true
+
+          make -j2
+
+          echo "========================================"
+          echo "BUILD FINISHED"
+          echo "========================================"
+
+          find . -maxdepth 3 -type f \
+            \( -name "*.cia" -o -name "*.3dsx" -o -name "*.elf" \) \
+            -print
+
+          BUILD_SCRIPT
 
       - name: Verify CIA
         shell: bash
