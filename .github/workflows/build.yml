@@ -86,7 +86,6 @@ jobs:
 
           export DEVKITPRO=/opt/devkitpro
           export DEVKITARM=/opt/devkitpro/devkitARM
-
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
 
           echo "========================================"
@@ -127,14 +126,12 @@ jobs:
           echo "Host build dependencies installed."
 
           echo "========================================"
-          echo "BUILDING BANNERS TOOL"
+          echo "BUILDING BANNERTOOL"
           echo "========================================"
 
           cd /tmp
 
           rm -rf bannertool
-
-          echo "Cloning bannertool..."
 
           git clone \
             --depth 1 \
@@ -143,19 +140,13 @@ jobs:
 
           cd bannertool
 
-          echo "Configuring buildtools submodule..."
-
           git config \
             submodule.buildtools.url \
             https://github.com/Steveice10/buildtools.git
 
-          echo "Initializing buildtools..."
-
           git submodule update \
             --init \
             --depth 1
-
-          echo "Bannertool source prepared."
 
           echo "Building bannertool..."
 
@@ -164,8 +155,7 @@ jobs:
           BANNERTOOL="/tmp/bannertool/output/linux-x86_64/bannertool"
 
           if [ ! -f "$BANNERTOOL" ]; then
-            echo "ERROR: Native bannertool build did not produce:"
-            echo "$BANNERTOOL"
+            echo "ERROR: bannertool executable was not produced."
 
             find /tmp/bannertool \
               -maxdepth 6 \
@@ -181,12 +171,10 @@ jobs:
           cp "$BANNERTOOL" \
             "$DEVKITPRO/tools/bin/bannertool"
 
-          echo "Native bannertool installed."
+          echo "bannertool installed."
 
           ls -lh \
             "$DEVKITPRO/tools/bin/bannertool"
-
-          echo "Testing bannertool..."
 
           bannertool --help || true
 
@@ -201,10 +189,6 @@ jobs:
           wget -q \
             https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.19.0/makerom-v0.19.0-ubuntu_x86_64.zip \
             -O makerom.zip
-
-          echo "makerom downloaded."
-
-          ls -lh makerom.zip
 
           rm -rf makerom-extracted
 
@@ -240,8 +224,6 @@ jobs:
           ls -lh \
             "$DEVKITPRO/tools/bin/makerom"
 
-          echo "Testing makerom..."
-
           makerom -h || true
 
           echo "========================================"
@@ -252,8 +234,6 @@ jobs:
 
           rm -rf tex3ds
 
-          echo "Cloning tex3ds v2.3.0..."
-
           git clone \
             --depth 1 \
             --branch v2.3.0 \
@@ -262,20 +242,12 @@ jobs:
 
           cd tex3ds
 
-          echo "Generating tex3ds configure files..."
-
           ./autogen.sh
-
-          echo "Configuring tex3ds..."
 
           ./configure \
             --prefix="$DEVKITPRO/tools"
 
-          echo "Building tex3ds..."
-
           make -j2
-
-          echo "Installing tex3ds..."
 
           make install
 
@@ -309,11 +281,7 @@ jobs:
             's/gdbhio_mode_t gdbMode = 0;/gdbhio_mode_t gdbMode __attribute__((unused)) = 0;/' \
             source/gdbhio.c
 
-          echo "Building libctru..."
-
           make -j2
-
-          echo "Installing libctru..."
 
           make install
 
@@ -335,11 +303,7 @@ jobs:
 
           cd citro3d-1.7.1
 
-          echo "Building citro3d..."
-
           make -j2
-
-          echo "Installing citro3d..."
 
           make install
 
@@ -361,7 +325,7 @@ jobs:
 
           cd citro2d-1.6.0
 
-          echo "Patching citro2d return types..."
+          echo "Patching citro2d source..."
 
           sed -i \
             's/void C2D_Fade(u32 color)/bool C2D_Fade(u32 color)/' \
@@ -407,8 +371,6 @@ jobs:
 
           make -j2
 
-          echo "Installing citro2d..."
-
           make install
 
           echo "citro2d complete."
@@ -420,7 +382,6 @@ jobs:
           cd /work
 
           rm -rf mgba
-
           rm -f mgba.tar.gz
 
           wget -q \
@@ -479,7 +440,6 @@ jobs:
 
           if old in text:
               text = text.replace(old, new, 1)
-
           else:
               start = text.find("if (gbBiosPath[0])")
 
@@ -528,10 +488,30 @@ jobs:
 
           rm -rf mgba/build-hoenn-3ds
 
+          echo "Checking mGBA 3DS toolchain..."
+
+          if [ ! -f "mgba/src/platform/3ds/CMakeToolchain.txt" ]; then
+            echo "ERROR: mGBA 3DS CMake toolchain was not found."
+
+            echo "Searching for CMakeToolchain.txt..."
+
+            find mgba \
+              -type f \
+              -name "CMakeToolchain.txt" \
+              -print
+
+            exit 1
+          fi
+
+          echo "mGBA 3DS toolchain found:"
+
+          ls -lh \
+            mgba/src/platform/3ds/CMakeToolchain.txt
+
           cmake \
             -S mgba \
             -B mgba/build-hoenn-3ds \
-            -DCMAKE_TOOLCHAIN_FILE="$DEVKITARM/3ds/CMakeToolchain.txt" \
+            -DCMAKE_TOOLCHAIN_FILE="$PWD/mgba/src/platform/3ds/CMakeToolchain.txt" \
             -D3DS=ON \
             -DLIBMGBA_ONLY=ON \
             -DBUILD_STATIC=ON \
