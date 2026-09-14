@@ -241,70 +241,16 @@ jobs:
           test -n "$LIBCTRU_ROOT"
           test -f "$LIBCTRU_ROOT/Makefile"
 
-          # --------------------------------------------------------
-          # Find gdbhio.c
-          # --------------------------------------------------------
-
-          GDBHIO_FILE="$(
-            find /tmp/libctru/libctru-2.7.0 \
-              -type f \
-              -name gdbhio.c \
-              -print \
-              -quit
-          )"
-
-          test -n "$GDBHIO_FILE"
-
-          echo "Patching:"
-          echo "$GDBHIO_FILE"
-
-          # --------------------------------------------------------
-          # Fix unused gdbMode warning without replacing CFLAGS
-          # --------------------------------------------------------
-
-          python3 - "$GDBHIO_FILE" <<'PY'
-          from pathlib import Path
-          import re
-          import sys
-
-          p = Path(sys.argv[1])
-          s = p.read_text()
-
-          pattern = re.compile(
-              r'(?m)^(\s*)gdbMode_t\s+gdbMode\s*=\s*0\s*;'
-          )
-
-          m = pattern.search(s)
-
-          if not m:
-              raise SystemExit(
-                  "ERROR: Could not find gdbMode declaration"
-              )
-
-          replacement = (
-              m.group(1)
-              + "gdbMode_t gdbMode __attribute__((unused)) = 0;"
-          )
-
-          s = (
-              s[:m.start()]
-              + replacement
-              + s[m.end():]
-          )
-
-          p.write_text(s)
-
-          print("libctru gdbMode patch complete.")
-          PY
-
-          # --------------------------------------------------------
-          # Build
-          # --------------------------------------------------------
-
           cd "$LIBCTRU_ROOT"
 
           echo "Building libctru from:"
           pwd
+
+          # Prevent the unused-but-set-variable warning
+          # from being treated as an error.
+          export CFLAGS="${CFLAGS:-} -Wno-error=unused-but-set-variable"
+
+          echo "CFLAGS=$CFLAGS"
 
           make -j2
 
@@ -448,8 +394,6 @@ jobs:
 
           s = p.read_text()
 
-          # mGBA's current static library target is "mgba".
-          # Older project scaffolding used "mgba-static".
           s = s.replace(
               "mgba-static",
               "mgba"
