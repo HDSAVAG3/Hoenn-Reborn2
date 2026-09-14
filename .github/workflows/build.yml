@@ -22,13 +22,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+
       # ============================================================
-      # BASIC LINUX TOOLS
+      # LINUX BUILD TOOLS
       # ============================================================
 
       - name: Install Linux build tools
         run: |
           apt-get update
+
           apt-get install -y \
             wget \
             curl \
@@ -40,6 +42,7 @@ jobs:
             xz-utils \
             zstd \
             file
+
 
       # ============================================================
       # DEVKITPRO ENVIRONMENT
@@ -58,8 +61,12 @@ jobs:
           echo "DEVKITPRO=$DEVKITPRO" >> "$GITHUB_ENV"
           echo "DEVKITARM=$DEVKITARM" >> "$GITHUB_ENV"
 
+          echo "DEVKITPRO=$DEVKITPRO"
+          echo "DEVKITARM=$DEVKITARM"
+
+
       # ============================================================
-      # DEVKITPRO CMAKE + CATNIP
+      # INSTALL 3DS CMAKE
       # ============================================================
 
       - name: Install devkitPro CMake helpers
@@ -69,9 +76,7 @@ jobs:
 
           cd /tmp
 
-          # --------------------------------------------------------
-          # 3DS CMake package
-          # --------------------------------------------------------
+          echo "Downloading 3DS CMake..."
 
           wget -O 3ds-cmake.pkg.tar.zst \
             https://wii.leseratte10.de/devkitPro/cmake/3ds-cmake-1.5.2-1-any.pkg.tar.zst
@@ -90,9 +95,7 @@ jobs:
             /tmp/3ds-cmake/opt/devkitpro/. \
             /opt/devkitpro/
 
-          # --------------------------------------------------------
-          # Catnip
-          # --------------------------------------------------------
+          echo "Downloading Catnip..."
 
           wget -O catnip.pkg.tar.zst \
             https://wii.leseratte10.de/devkitPro/other-stuff/catnip-0.2.0-1-any.pkg.tar.zst
@@ -111,11 +114,7 @@ jobs:
             /tmp/catnip/opt/devkitpro/. \
             /opt/devkitpro/
 
-          # --------------------------------------------------------
-          # Show installed CMake tools
-          # --------------------------------------------------------
-
-          echo "Installed devkitPro CMake files:"
+          echo "Searching installed CMake/Catnip files..."
 
           find /opt/devkitpro \
             -type f \
@@ -124,21 +123,27 @@ jobs:
               -o \
               -name '3DS.cmake' \
               -o \
+              -name 'catnip' \
+              -o \
               -name '*catnip*' \
             \) \
             -print \
             2>/dev/null || true
 
-          echo "devkitPro CMake helper installation complete."
+          echo "devkitPro CMake/Catnip installation complete."
+
 
       # ============================================================
-      # VERIFY DEVKITPRO CMAKE
+      # VERIFY 3DS CMAKE
       # ============================================================
 
       - name: Verify devkitPro CMake
         shell: bash
         run: |
           set -e
+
+          export DEVKITPRO=/opt/devkitpro
+          export DEVKITARM=/opt/devkitpro/devkitARM
 
           export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
           export PATH="/opt/devkitpro/tools/bin:$PATH"
@@ -168,8 +173,50 @@ jobs:
 
           echo "devkitPro CMake is ready."
 
+
       # ============================================================
-      # 3DS TOOLS
+      # VERIFY CATNIP
+      # ============================================================
+
+      - name: Verify Catnip
+        shell: bash
+        run: |
+          set -e
+
+          export DEVKITPRO=/opt/devkitpro
+          export DEVKITARM=/opt/devkitpro/devkitARM
+
+          export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
+          export PATH="/opt/devkitpro/tools/bin:$PATH"
+          export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
+
+          echo "Searching for Catnip..."
+
+          CATNIP_BIN="$(
+            find /opt/devkitpro \
+              -type f \
+              -name catnip \
+              -print \
+              -quit
+          )"
+
+          if [ -z "$CATNIP_BIN" ]; then
+            echo "ERROR: catnip executable was not found."
+            exit 1
+          fi
+
+          chmod +x "$CATNIP_BIN"
+
+          echo "Found Catnip:"
+          echo "$CATNIP_BIN"
+
+          "$CATNIP_BIN" --version || true
+
+          echo "Catnip is ready."
+
+
+      # ============================================================
+      # INSTALL 3DS TOOLS
       # ============================================================
 
       - name: Install 3dstools
@@ -204,14 +251,19 @@ jobs:
 
           find /opt/devkitpro/tools \
             -type f \
-            \( -name tex3ds -o -name 3dsxtool \) \
+            \( \
+              -name tex3ds \
+              -o \
+              -name 3dsxtool \
+            \) \
             -exec chmod +x {} \; \
             2>/dev/null || true
 
           echo "3dstools installation complete."
 
+
       # ============================================================
-      # BANNERTOOL
+      # INSTALL BANNERTOOL
       # ============================================================
 
       - name: Install bannertool
@@ -235,7 +287,8 @@ jobs:
 
           chmod +x "$BANNERTOOL_BIN"
 
-          cp "$BANNERTOOL_BIN" \
+          cp \
+            "$BANNERTOOL_BIN" \
             /opt/devkitpro/tools/bin/bannertool
 
           chmod +x \
@@ -243,8 +296,9 @@ jobs:
 
           echo "bannertool installation complete."
 
+
       # ============================================================
-      # MAKEROM
+      # INSTALL MAKEROM
       # ============================================================
 
       - name: Install makerom
@@ -274,7 +328,8 @@ jobs:
 
           chmod +x "$MAKEROM_BIN"
 
-          cp "$MAKEROM_BIN" \
+          cp \
+            "$MAKEROM_BIN" \
             /opt/devkitpro/tools/bin/makerom
 
           chmod +x \
@@ -282,8 +337,9 @@ jobs:
 
           echo "makerom installation complete."
 
+
       # ============================================================
-      # VERIFY TOOLS
+      # VERIFY ALL 3DS TOOLS
       # ============================================================
 
       - name: Verify 3DS tools
@@ -291,29 +347,59 @@ jobs:
         run: |
           set -e
 
+          export DEVKITPRO=/opt/devkitpro
+          export DEVKITARM=/opt/devkitpro/devkitARM
+
           export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
           export PATH="/opt/devkitpro/tools/bin:$PATH"
           export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
 
-          echo "ARM compiler:"
+          echo "======================================"
+          echo "ARM COMPILER"
+          echo "======================================"
+
           command -v arm-none-eabi-gcc
 
-          echo "3DS CMake:"
+          echo "======================================"
+          echo "3DS CMAKE"
+          echo "======================================"
+
           command -v arm-none-eabi-cmake
 
-          echo "bannertool:"
+          echo "======================================"
+          echo "CATNIP"
+          echo "======================================"
+
+          command -v catnip
+
+          echo "======================================"
+          echo "BANNERTOOL"
+          echo "======================================"
+
           command -v bannertool
 
-          echo "makerom:"
+          echo "======================================"
+          echo "MAKEROM"
+          echo "======================================"
+
           command -v makerom
 
-          echo "tex3ds:"
+          echo "======================================"
+          echo "TEX3DS"
+          echo "======================================"
+
           command -v tex3ds
 
-          echo "3dsxtool:"
+          echo "======================================"
+          echo "3DSXTOOL"
+          echo "======================================"
+
           command -v 3dsxtool
 
-          echo "All required tools are available."
+          echo "======================================"
+          echo "ALL REQUIRED TOOLS ARE AVAILABLE"
+          echo "======================================"
+
 
       # ============================================================
       # BUILD LIBCTRU
@@ -358,7 +444,11 @@ jobs:
 
           test -n "$GDBHIO_FILE"
 
-          echo "Patching:"
+          echo "======================================"
+          echo "PATCHING LIBCTRU"
+          echo "======================================"
+
+          echo "File:"
           echo "$GDBHIO_FILE"
 
           python3 - "$GDBHIO_FILE" <<'PY'
@@ -412,12 +502,17 @@ jobs:
             "gdbMode __attribute__((unused))" \
             "$GDBHIO_FILE"
 
+          echo "======================================"
+          echo "BUILDING LIBCTRU"
+          echo "======================================"
+
           cd "$LIBCTRU_ROOT"
 
           make -j2
           make install
 
           echo "libctru build/install complete."
+
 
       # ============================================================
       # BUILD CITRO3D
@@ -427,6 +522,13 @@ jobs:
         shell: bash
         run: |
           set -e
+
+          export DEVKITPRO=/opt/devkitpro
+          export DEVKITARM=/opt/devkitpro/devkitARM
+
+          export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
+          export PATH="/opt/devkitpro/tools/bin:$PATH"
+          export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
 
           cd /tmp
 
@@ -444,6 +546,10 @@ jobs:
 
           test -f "$CITRO3D_ROOT/Makefile"
 
+          echo "======================================"
+          echo "BUILDING CITRO3D"
+          echo "======================================"
+
           cd "$CITRO3D_ROOT"
 
           make -j2
@@ -451,8 +557,18 @@ jobs:
 
           echo "citro3d build/install complete."
 
+
       # ============================================================
       # BUILD CITRO2D
+      #
+      # IMPORTANT:
+      # We use CATNIP here instead of directly invoking CMake.
+      #
+      # citro2d 1.7.0 uses:
+      #
+      # ctr_add_shader_library()
+      #
+      # which requires the devkitPro CMake/Catnip integration.
       # ============================================================
 
       - name: Build citro2d
@@ -472,6 +588,10 @@ jobs:
           rm -rf /tmp/citro2d
           mkdir -p /tmp/citro2d
 
+          echo "======================================"
+          echo "DOWNLOADING CITRO2D 1.7.0"
+          echo "======================================"
+
           wget -O citro2d.tar.gz \
             https://github.com/devkitPro/citro2d/archive/refs/tags/v1.7.0.tar.gz
 
@@ -482,35 +602,53 @@ jobs:
           CITRO2D_ROOT="/tmp/citro2d/citro2d-1.7.0"
 
           test -f "$CITRO2D_ROOT/CMakeLists.txt"
+          test -f "$CITRO2D_ROOT/Catnip.cmake"
 
           echo "======================================"
-          echo "Configuring citro2d with devkitPro CMake"
+          echo "CITRO2D FILES FOUND"
+          echo "======================================"
+
+          ls -lh "$CITRO2D_ROOT/CMakeLists.txt"
+          ls -lh "$CITRO2D_ROOT/Catnip.cmake"
+
+          echo "======================================"
+          echo "CHECKING CATNIP"
+          echo "======================================"
+
+          command -v catnip
+
+          catnip --version || true
+
+          echo "======================================"
+          echo "CHECKING 3DS CMAKE"
           echo "======================================"
 
           command -v arm-none-eabi-cmake
 
-          arm-none-eabi-cmake \
-            -S "$CITRO2D_ROOT" \
-            -B "$CITRO2D_ROOT/build" \
-            -DCMAKE_INSTALL_PREFIX=/opt/devkitpro/libctru \
-            -DCMAKE_BUILD_TYPE=Release
+          arm-none-eabi-cmake --version
 
           echo "======================================"
-          echo "Building citro2d"
+          echo "BUILDING CITRO2D WITH CATNIP"
           echo "======================================"
 
-          arm-none-eabi-cmake \
-            --build "$CITRO2D_ROOT/build" \
-            -j2
+          cd "$CITRO2D_ROOT"
+
+          catnip \
+            -T 3DS \
+            build
 
           echo "======================================"
-          echo "Installing citro2d"
+          echo "INSTALLING CITRO2D WITH CATNIP"
           echo "======================================"
 
-          arm-none-eabi-cmake \
-            --install "$CITRO2D_ROOT/build"
+          catnip \
+            -T 3DS \
+            install
 
-          echo "citro2d build/install complete."
+          echo "======================================"
+          echo "CITRO2D BUILD/INSTALL COMPLETE"
+          echo "======================================"
+
 
       # ============================================================
       # VERIFY 3DS LIBRARIES
@@ -521,20 +659,33 @@ jobs:
         run: |
           set -e
 
-          echo "libctru:"
+          echo "======================================"
+          echo "LIBCTRU"
+          echo "======================================"
+
           find /opt/devkitpro \
             -name libctru.a \
             -print
 
-          echo "libcitro3d:"
+          echo "======================================"
+          echo "LIBCITRO3D"
+          echo "======================================"
+
           find /opt/devkitpro \
             -name libcitro3d.a \
             -print
 
-          echo "libcitro2d:"
+          echo "======================================"
+          echo "LIBCITRO2D"
+          echo "======================================"
+
           find /opt/devkitpro \
             -name libcitro2d.a \
             -print
+
+          echo "======================================"
+          echo "CHECKING EXPECTED FILES"
+          echo "======================================"
 
           test -f \
             /opt/devkitpro/libctru/lib/libctru.a
@@ -548,6 +699,7 @@ jobs:
           echo "======================================"
           echo "ALL 3DS LIBRARIES FOUND"
           echo "======================================"
+
 
       # ============================================================
       # PATCH HOENN REBORN MAKEFILE
@@ -578,8 +730,9 @@ jobs:
           print("Hoenn Reborn Makefile patched.")
           PY
 
+
       # ============================================================
-      # VERIFY PROJECT
+      # VERIFY PROJECT FILES
       # ============================================================
 
       - name: Verify project files
@@ -601,8 +754,9 @@ jobs:
           echo "PROJECT FILES VERIFIED"
           echo "======================================"
 
+
       # ============================================================
-      # BUILD HOENN REBORN
+      # BUILD MGBA + HOENN REBORN
       # ============================================================
 
       - name: Build Hoenn Reborn
@@ -617,14 +771,30 @@ jobs:
           export PATH="/opt/devkitpro/tools/bin:$PATH"
           export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
 
-          echo "DEVKITPRO=$DEVKITPRO"
-          echo "DEVKITARM=$DEVKITARM"
+          echo "======================================"
+          echo "DEVKITPRO"
+          echo "======================================"
+
+          echo "$DEVKITPRO"
+
+          echo "======================================"
+          echo "DEVKITARM"
+          echo "======================================"
+
+          echo "$DEVKITARM"
+
+          echo "======================================"
+          echo "ARM COMPILER"
+          echo "======================================"
 
           arm-none-eabi-gcc --version
 
-          echo "Starting Hoenn Reborn build..."
+          echo "======================================"
+          echo "STARTING HOENN REBORN BUILD"
+          echo "======================================"
 
           make -j2
+
 
       # ============================================================
       # VERIFY CIA
@@ -644,6 +814,7 @@ jobs:
           ls -lh Hoenn_Reborn.cia
           wc -c Hoenn_Reborn.cia
 
+
       # ============================================================
       # VERIFY 3DSX
       # ============================================================
@@ -661,6 +832,7 @@ jobs:
 
           ls -lh Hoenn_Reborn.3dsx
           wc -c Hoenn_Reborn.3dsx
+
 
       # ============================================================
       # VERIFY ELF
@@ -680,6 +852,7 @@ jobs:
           ls -lh Hoenn_Reborn.elf
           wc -c Hoenn_Reborn.elf
 
+
       # ============================================================
       # UPLOAD CIA
       # ============================================================
@@ -690,6 +863,7 @@ jobs:
           name: Hoenn-Reborn-CIA
           path: Hoenn_Reborn.cia
           if-no-files-found: error
+
 
       # ============================================================
       # UPLOAD 3DSX
@@ -702,6 +876,7 @@ jobs:
           path: Hoenn_Reborn.3dsx
           if-no-files-found: error
 
+
       # ============================================================
       # UPLOAD ELF
       # ============================================================
@@ -713,8 +888,9 @@ jobs:
           path: Hoenn_Reborn.elf
           if-no-files-found: error
 
+
       # ============================================================
-      # UPLOAD BUILD FILES
+      # UPLOAD ALL BUILD FILES
       # ============================================================
 
       - name: Upload build files
