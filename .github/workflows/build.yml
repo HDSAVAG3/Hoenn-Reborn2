@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -23,71 +24,39 @@ jobs:
         run: |
           set -e
           sudo apt-get update
-          sudo apt-get install -y \
-            wget \
-            curl \
-            git \
-            cmake \
-            make \
-            python3 \
-            unzip \
-            xz-utils \
-            zstd \
-            p7zip-full
+          sudo apt-get install -y wget curl git cmake make python3 unzip xz-utils zstd p7zip-full
 
-      - name: Prepare devkitARM
+      - name: Check project
         shell: bash
         run: |
           set -e
 
-          docker pull devkitpro/devkitarm:latest
-
-          mkdir -p "$GITHUB_WORKSPACE/toolchain"
-
-          docker run --rm \
-            -v "$GITHUB_WORKSPACE:/work" \
-            devkitpro/devkitarm:latest \
-            bash -lc '
-              echo "DEVKITPRO=$DEVKITPRO"
-              echo "DEVKITARM=$DEVKITARM"
-              "$DEVKITARM/bin/arm-none-eabi-gcc" --version
-            '
-
-      - name: Find project
-        shell: bash
-        run: |
-          set -e
-
-          echo "Workspace:"
-          ls -la
+          echo "Checking repository..."
 
           if [ -f "Makefile" ]; then
-            echo "Project found in repository root."
-            exit 0
-          fi
-
-          if [ -f "Hoenn_Reborn_GitHub_Build.zip" ]; then
-            echo "Found project ZIP."
+            echo "Makefile found."
+          elif [ -f "Hoenn_Reborn_GitHub_Build.zip" ]; then
+            echo "Project ZIP found."
             unzip -o "Hoenn_Reborn_GitHub_Build.zip"
-          fi
-
-          if [ -f "Hoenn_Reborn_GitHub_Build/Makefile" ]; then
-            cp -a Hoenn_Reborn_GitHub_Build/. .
+            if [ -f "Hoenn_Reborn_GitHub_Build/Makefile" ]; then
+              cp -a Hoenn_Reborn_GitHub_Build/. .
+            fi
           fi
 
           if [ ! -f "Makefile" ]; then
-            echo "ERROR: Could not find the Hoenn Reborn Makefile."
-            echo "Files currently in workspace:"
+            echo "ERROR: Hoenn Reborn Makefile was not found."
             find . -maxdepth 3 -type f | sort | head -200
             exit 1
           fi
 
           echo "Project is ready."
 
-      - name: Build 3DS libraries and project
+      - name: Build everything
         shell: bash
         run: |
           set -e
+
+          docker pull devkitpro/devkitarm:latest
 
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/work" \
@@ -102,23 +71,24 @@ jobs:
               export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
 
               echo "========================================"
-              echo "DEVKITARM"
+              echo "Checking devkitARM"
               echo "========================================"
 
               "$DEVKITARM/bin/arm-none-eabi-gcc" --version
 
               echo "========================================"
-              echo "Build directories"
+              echo "Preparing 3DS libraries"
               echo "========================================"
 
               mkdir -p /tmp/3ds-libs
               cd /tmp/3ds-libs
 
               echo "========================================"
-              echo "libctru"
+              echo "Building libctru"
               echo "========================================"
 
               rm -rf libctru-2.7.0
+              rm -f libctru.tar.gz
 
               wget -q \
                 https://github.com/devkitPro/libctru/archive/refs/tags/v2.7.0.tar.gz \
@@ -128,149 +98,107 @@ jobs:
 
               cd libctru-2.7.0/libctru
 
-              python3 - <<'"'"'PY'"'"'
-from pathlib import Path
-
-p = Path("source/gdbhio.c")
-
-if p.exists():
-    s = p.read_text()
-
-    old = "gdbhio_mode_t gdbMode = 0;"
-
-    new = "gdbhio_mode_t gdbMode __attribute__((unused)) = 0;"
-
-    if old in s:
-        s = s.replace(old, new)
-        p.write_text(s)
-        print("Patched gdbMode warning.")
-    else:
-        print("gdbMode line already patched or changed.")
-PY
+              sed -i \
+                "s/gdbhio_mode_t gdbMode = 0;/gdbhio_mode_t gdbMode __attribute__((unused)) = 0;/" \
+                source/gdbhio.c
 
               make -j2
               make install
 
+              echo "libctru complete."
+
               echo "========================================"
-              echo "citro3d"
+              echo "Building citro3d"
               echo "========================================"
 
               cd /tmp/3ds-libs
 
-              rm -rf citro3d-1.6.2
+              rm -rf citro3d-1.7.1
+              rm -f citro3d.tar.gz
 
               wget -q \
-                https://github.com/devkitPro/citro3d/archive/refs/tags/v1.6.2.tar.gz \
+                https://github.com/devkitPro/citro3d/archive/refs/tags/v1.7.1.tar.gz \
                 -O citro3d.tar.gz
 
               tar -xzf citro3d.tar.gz
 
-              cd citro3d-1.6.2
+              cd citro3d-1.7.1
 
               make -j2
               make install
 
+              echo "citro3d complete."
+
               echo "========================================"
-              echo "citro2d"
+              echo "Building citro2d"
               echo "========================================"
 
               cd /tmp/3ds-libs
 
-              rm -rf citro2d-1.7.0
+              rm -rf citro2d-1.6.0
+              rm -f citro2d.tar.gz
 
               wget -q \
-                https://github.com/devkitPro/citro2d/archive/refs/tags/v1.7.0.tar.gz \
+                https://github.com/devkitPro/citro2d/archive/refs/tags/v1.6.0.tar.gz \
                 -O citro2d.tar.gz
 
               tar -xzf citro2d.tar.gz
 
-              cd citro2d-1.7.0
+              cd citro2d-1.6.0
 
-              echo "Checking citro2d..."
+              sed -i \
+                "s/void C2D_Fade(u32 color)/bool C2D_Fade(u32 color)/" \
+                source/base.c
 
-              if [ -f "Makefile" ]; then
-                make -j2
-                make install
-              else
-                echo "citro2d Makefile not present."
-                echo "Using CMake build."
+              sed -i \
+                "s/void C2D_SetTintMode(C2D_TintMode mode)/bool C2D_SetTintMode(C2D_TintMode mode)/" \
+                source/base.c
 
-                mkdir build
-                cd build
+              sed -i \
+                "/ctx->fadeClr = color;/a\\    return true;" \
+                source/base.c
 
-                cmake .. \
-                  -DCMAKE_TOOLCHAIN_FILE="$DEVKITARM/3ds_rules"
+              sed -i \
+                "/ctx->flags = (ctx->flags &~ C2DiF_TintMode_Mask) | (new_mode << (C2DiF_TintMode_Shift - C2DiF_Mode_Shift));/a\\    return true;" \
+                source/base.c
 
-                make -j2
-                make install
-              fi
+              sed -i \
+                "s/void C2D_Fade(u32 color)/bool C2D_Fade(u32 color)/" \
+                include/citro2d.h
+
+              sed -i \
+                "s/void C2D_SetTintMode(C2D_TintMode mode)/bool C2D_SetTintMode(C2D_TintMode mode)/" \
+                include/citro2d.h
+
+              make -j2
+              make install
+
+              echo "citro2d complete."
 
               echo "========================================"
-              echo "3DS libraries complete"
-              echo "========================================"
-
-              ls -lh "$DEVKITPRO/libctru/lib" || true
-
-              echo "========================================"
-              echo "mGBA"
+              echo "Building mGBA 0.10.5"
               echo "========================================"
 
               cd /work
 
               rm -rf mgba
+              rm -f mgba.tar.gz
 
               wget -q \
                 https://github.com/mgba-emu/mgba/archive/refs/tags/0.10.5.tar.gz \
                 -O mgba.tar.gz
 
               tar -xzf mgba.tar.gz
-
               mv mgba-0.10.5 mgba
 
-              CONFIG="mgba/src/feature/gui/gui-config.c"
+              echo "Patching mGBA GBA-only configuration..."
 
-              python3 - "$CONFIG" <<'"'"'PY'"'"'
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-text = path.read_text()
-
-old = """            if (gbBiosPath[0]) {
-                mCoreConfigSetValue(&runner->config, "gb.bios", gbBiosPath);
-            }
-            if (gbcBiosPath[0]) {
-                mCoreConfigSetValue(&runner->config, "gbc.bios", gbcBiosPath);
-            }
-            if (sgbBiosPath[0]) {
-                mCoreConfigSetValue(&runner->config, "sgb.bios", sgbBiosPath);
-            }
-"""
-
-new = """#ifdef M_CORE_GB
-            if (gbBiosPath[0]) {
-                mCoreConfigSetValue(&runner->config, "gb.bios", gbBiosPath);
-            }
-            if (gbcBiosPath[0]) {
-                mCoreConfigSetValue(&runner->config, "gbc.bios", gbcBiosPath);
-            }
-            if (sgbBiosPath[0]) {
-                mCoreConfigSetValue(&runner->config, "sgb.bios", sgbBiosPath);
-            }
-#endif
-"""
-
-if old in text:
-    text = text.replace(old, new)
-    path.write_text(text)
-    print("mGBA GBA-only GUI patch applied.")
-else:
-    print("mGBA GUI block was already patched or has changed.")
-PY
+              python3 -c "from pathlib import Path; p=Path(\"mgba/src/feature/gui/gui-config.c\"); s=p.read_text(); old='''            if (gbBiosPath[0]) {\\n                mCoreConfigSetValue(&runner->config, \"gb.bios\", gbBiosPath);\\n            }\\n            if (gbcBiosPath[0]) {\\n                mCoreConfigSetValue(&runner->config, \"gbc.bios\", gbcBiosPath);\\n            }\\n            if (sgbBiosPath[0]) {\\n                mCoreConfigSetValue(&runner->config, \"sgb.bios\", sgbBiosPath);\\n            }\\n'''; new='''#ifdef M_CORE_GB\\n            if (gbBiosPath[0]) {\\n                mCoreConfigSetValue(&runner->config, \"gb.bios\", gbBiosPath);\\n            }\\n            if (gbcBiosPath[0]) {\\n                mCoreConfigSetValue(&runner->config, \"gbc.bios\", gbcBiosPath);\\n            }\\n            if (sgbBiosPath[0]) {\\n                mCoreConfigSetValue(&runner->config, \"sgb.bios\", sgbBiosPath);\\n            }\\n#endif\\n'''; p.write_text(s.replace(old,new))"
 
               rm -rf mgba/build-hoenn-3ds
 
-              cmake -S mgba \
+              cmake \
+                -S mgba \
                 -B mgba/build-hoenn-3ds \
                 -DCMAKE_TOOLCHAIN_FILE="$DEVKITARM/3ds/CMakeToolchain.txt" \
                 -D3DS=ON \
@@ -282,96 +210,71 @@ PY
                 -DDISABLE_DEPS=ON \
                 -DBUILD_LTO=OFF
 
-              cmake --build mgba/build-hoenn-3ds \
+              cmake \
+                --build mgba/build-hoenn-3ds \
                 --target mgba \
                 -j2
 
-              mkdir -p mgba/build-hoenn-3ds/include
-
-              find mgba/build-hoenn-3ds \
-                -name "libmgba.a" \
-                -print
-
-              MGBA_LIB=$(find mgba/build-hoenn-3ds \
-                -name "libmgba.a" \
-                -print -quit)
+              MGBA_LIB=$(find mgba/build-hoenn-3ds -name "libmgba.a" -print -quit)
 
               if [ -z "$MGBA_LIB" ]; then
-                echo "ERROR: libmgba.a was not produced."
+                echo "ERROR: mGBA library was not produced."
                 exit 1
               fi
 
               mkdir -p mgba/build-hoenn-3ds/lib
               cp "$MGBA_LIB" mgba/build-hoenn-3ds/lib/libmgba-static.a
 
-              echo "mGBA library:"
+              echo "mGBA library created:"
               ls -lh mgba/build-hoenn-3ds/lib/libmgba-static.a
 
               echo "========================================"
-              echo "Patch project Makefile"
+              echo "Preparing Hoenn Reborn"
               echo "========================================"
 
-              if [ -f Makefile ]; then
-                sed -i 's/mgba-static/mgba/g' Makefile
-              fi
+              sed -i "s/mgba-static/mgba/g" Makefile
 
               echo "========================================"
-              echo "Project Makefile"
+              echo "Makefile"
               echo "========================================"
 
-              sed -n '1,220p' Makefile
+              sed -n "1,220p" Makefile
 
               echo "========================================"
-              echo "Build Hoenn Reborn"
+              echo "Building Hoenn Reborn"
               echo "========================================"
 
               make clean || true
-
               make -j2
 
               echo "========================================"
-              echo "BUILD COMPLETE"
+              echo "BUILD FINISHED"
               echo "========================================"
 
-              ls -lh \
-                Hoenn_Reborn.cia \
-                Hoenn_Reborn.3dsx \
-                Hoenn_Reborn.elf \
-                Hoenn_Reborn.smdh \
-                Hoenn_Reborn.bnr
+              find . -maxdepth 3 -type f \
+                \( -name "*.cia" -o -name "*.3dsx" -o -name "*.elf" \) \
+                -print
             '
 
-      - name: Verify output
+      - name: Verify CIA
         shell: bash
         run: |
           set -e
 
-          echo "Final build files:"
-
-          find . \
-            -maxdepth 3 \
-            -type f \
-            \( \
-              -name "*.cia" \
-              -o -name "*.3dsx" \
-              -o -name "*.elf" \
-            \) \
-            -print
-
           CIA=$(find . -maxdepth 3 -name "*.cia" -print -quit)
 
           if [ -z "$CIA" ]; then
-            echo "ERROR: No CIA was produced."
+            echo "ERROR: No CIA file was produced."
             exit 1
           fi
 
-          echo "CIA found:"
+          echo "CIA successfully produced:"
           ls -lh "$CIA"
 
-      - name: Upload CIA
+      - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: Hoenn-Reborn-CIA
+          name: Hoenn-Reborn-Build
           path: |
             **/*.cia
             **/*.3dsx
