@@ -17,6 +17,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ============================================================
+      # BASIC LINUX TOOLS
+      # ============================================================
+
       - name: Install Linux build tools
         run: |
           apt-get update
@@ -31,6 +35,10 @@ jobs:
             xz-utils \
             zstd \
             file
+
+      # ============================================================
+      # DEVKITPRO ENVIRONMENT
+      # ============================================================
 
       - name: Configure devkitPro environment
         shell: bash
@@ -58,6 +66,7 @@ jobs:
           wget -O 3dstools.pkg.tar.zst \
             https://wii.leseratte10.de/devkitPro/other-stuff/3dstools/3dstools-1.3.1-3-linux_x86_64.pkg.tar.zst
 
+          rm -rf /tmp/3dstools
           mkdir -p /tmp/3dstools
 
           tar \
@@ -67,25 +76,29 @@ jobs:
 
           echo "Extracted 3dstools package."
 
-          find /tmp/3dstools -type f | head -50
+          find /tmp/3dstools -maxdepth 5 -type f -print | head -100
 
-          # Copy installed tools into devkitPro tools directory.
           if [ -d /tmp/3dstools/opt/devkitpro/tools ]; then
             cp -a \
               /tmp/3dstools/opt/devkitpro/tools/. \
               /opt/devkitpro/tools/
           fi
 
-          # Some packages use usr/bin.
           if [ -d /tmp/3dstools/usr/bin ]; then
             cp -a \
               /tmp/3dstools/usr/bin/. \
               /opt/devkitpro/tools/bin/
           fi
 
-          chmod +x /opt/devkitpro/tools/bin/* 2>/dev/null || true
+          find /opt/devkitpro/tools -type f \
+            \( -name tex3ds -o -name 3dsxtool \) \
+            -exec chmod +x {} \; 2>/dev/null || true
 
           echo "3dstools installation complete."
+
+      # ============================================================
+      # BANNERTOOL
+      # ============================================================
 
       - name: Install bannertool
         shell: bash
@@ -95,36 +108,36 @@ jobs:
           cd /tmp
 
           wget -O bannertool.zip \
-            https://github.com/devkitPro/bannertool/releases/download/1.2.2/bannertool.zip
+            https://github.com/Epicpkmn11/bannertool/releases/download/v1.2.2/bannertool.zip
 
           rm -rf /tmp/bannertool
           mkdir -p /tmp/bannertool
 
           unzip -q bannertool.zip -d /tmp/bannertool
 
-          BANNERTOOL_BIN="$(find /tmp/bannertool \
-            -type f \
-            -name bannertool \
-            -path '*linux-x86_64*' \
-            -print \
-            -quit)"
+          echo "Contents of bannertool package:"
+          find /tmp/bannertool -maxdepth 3 -type f -print
 
-          if [ -z "$BANNERTOOL_BIN" ]; then
-            BANNERTOOL_BIN="$(find /tmp/bannertool \
-              -type f \
-              -name bannertool \
-              -print \
-              -quit)"
-          fi
+          BANNERTOOL_BIN="/tmp/bannertool/linux-x86_64/bannertool"
 
-          test -n "$BANNERTOOL_BIN"
+          test -f "$BANNERTOOL_BIN"
 
           chmod +x "$BANNERTOOL_BIN"
 
           cp "$BANNERTOOL_BIN" \
             /opt/devkitpro/tools/bin/bannertool
 
-          test -x /opt/devkitpro/tools/bin/bannertool
+          chmod +x \
+            /opt/devkitpro/tools/bin/bannertool
+
+          test -x \
+            /opt/devkitpro/tools/bin/bannertool
+
+          echo "bannertool installation complete."
+
+      # ============================================================
+      # MAKEROM
+      # ============================================================
 
       - name: Install makerom
         shell: bash
@@ -141,11 +154,13 @@ jobs:
 
           unzip -q makerom.zip -d /tmp/makerom
 
-          MAKEROM_BIN="$(find /tmp/makerom \
-            -type f \
-            -name makerom \
-            -print \
-            -quit)"
+          MAKEROM_BIN="$(
+            find /tmp/makerom \
+              -type f \
+              -name makerom \
+              -print \
+              -quit
+          )"
 
           test -n "$MAKEROM_BIN"
 
@@ -154,14 +169,24 @@ jobs:
           cp "$MAKEROM_BIN" \
             /opt/devkitpro/tools/bin/makerom
 
-          test -x /opt/devkitpro/tools/bin/makerom
+          chmod +x \
+            /opt/devkitpro/tools/bin/makerom
+
+          test -x \
+            /opt/devkitpro/tools/bin/makerom
+
+          echo "makerom installation complete."
+
+      # ============================================================
+      # VERIFY TOOLS
+      # ============================================================
 
       - name: Verify 3DS tools
         shell: bash
         run: |
           set -e
 
-          echo "Checking arm-none-eabi-gcc..."
+          echo "Checking ARM compiler..."
           command -v arm-none-eabi-gcc
 
           echo "Checking bannertool..."
@@ -176,10 +201,10 @@ jobs:
           echo "Checking 3dsxtool..."
           command -v 3dsxtool
 
-          echo "3DS tools are ready."
+          echo "All required 3DS tools are available."
 
       # ============================================================
-      # LIBCTRU
+      # BUILD LIBCTRU
       # ============================================================
 
       - name: Build libctru
@@ -195,8 +220,11 @@ jobs:
           wget -O libctru.tar.gz \
             https://github.com/devkitPro/libctru/archive/refs/tags/v2.7.0.tar.gz
 
-          tar -xzf libctru.tar.gz \
+          tar \
+            -xzf libctru.tar.gz \
             -C /tmp/libctru
+
+          echo "Finding libctru Makefile..."
 
           LIBCTRU_ROOT="$(
             find /tmp/libctru/libctru-2.7.0 \
@@ -213,6 +241,10 @@ jobs:
           test -n "$LIBCTRU_ROOT"
           test -f "$LIBCTRU_ROOT/Makefile"
 
+          # --------------------------------------------------------
+          # Find gdbhio.c
+          # --------------------------------------------------------
+
           GDBHIO_FILE="$(
             find /tmp/libctru/libctru-2.7.0 \
               -type f \
@@ -225,6 +257,10 @@ jobs:
 
           echo "Patching:"
           echo "$GDBHIO_FILE"
+
+          # --------------------------------------------------------
+          # Fix unused gdbMode warning without replacing CFLAGS
+          # --------------------------------------------------------
 
           python3 - "$GDBHIO_FILE" <<'PY'
           from pathlib import Path
@@ -242,7 +278,7 @@ jobs:
 
           if not m:
               raise SystemExit(
-                  "Could not find gdbMode declaration"
+                  "ERROR: Could not find gdbMode declaration"
               )
 
           replacement = (
@@ -261,18 +297,23 @@ jobs:
           print("libctru gdbMode patch complete.")
           PY
 
+          # --------------------------------------------------------
+          # Build
+          # --------------------------------------------------------
+
           cd "$LIBCTRU_ROOT"
 
           echo "Building libctru from:"
           pwd
 
           make -j2
+
           make install
 
           echo "libctru build/install complete."
 
       # ============================================================
-      # CITRO3D
+      # BUILD CITRO3D
       # ============================================================
 
       - name: Build citro3d
@@ -288,7 +329,8 @@ jobs:
           wget -O citro3d.tar.gz \
             https://github.com/devkitPro/citro3d/archive/refs/tags/v1.7.1.tar.gz
 
-          tar -xzf citro3d.tar.gz \
+          tar \
+            -xzf citro3d.tar.gz \
             -C /tmp/citro3d
 
           CITRO3D_ROOT="/tmp/citro3d/citro3d-1.7.1"
@@ -297,13 +339,16 @@ jobs:
 
           cd "$CITRO3D_ROOT"
 
+          echo "Building citro3d..."
+
           make -j2
+
           make install
 
           echo "citro3d build/install complete."
 
       # ============================================================
-      # CITRO2D
+      # BUILD CITRO2D
       # ============================================================
 
       - name: Build citro2d
@@ -319,21 +364,28 @@ jobs:
           wget -O citro2d.tar.gz \
             https://github.com/devkitPro/citro2d/archive/refs/tags/v1.7.0.tar.gz
 
-          tar -xzf citro2d.tar.gz \
+          tar \
+            -xzf citro2d.tar.gz \
             -C /tmp/citro2d
 
           CITRO2D_ROOT="/tmp/citro2d/citro2d-1.7.0"
 
           test -f "$CITRO2D_ROOT/CMakeLists.txt"
 
+          echo "Configuring citro2d..."
+
           cmake \
             -S "$CITRO2D_ROOT" \
             -B "$CITRO2D_ROOT/build" \
             -DCMAKE_INSTALL_PREFIX=/opt/devkitpro/libctru
 
+          echo "Building citro2d..."
+
           cmake \
             --build "$CITRO2D_ROOT/build" \
             -j2
+
+          echo "Installing citro2d..."
 
           cmake \
             --install "$CITRO2D_ROOT/build"
@@ -364,14 +416,21 @@ jobs:
             -name 'libcitro2d.a' \
             -print
 
-          test -f /opt/devkitpro/libctru/lib/libctru.a
-          test -f /opt/devkitpro/libctru/lib/libcitro3d.a
-          test -f /opt/devkitpro/libctru/lib/libcitro2d.a
+          test -f \
+            /opt/devkitpro/libctru/lib/libctru.a
 
-          echo "All 3DS libraries found."
+          test -f \
+            /opt/devkitpro/libctru/lib/libcitro3d.a
+
+          test -f \
+            /opt/devkitpro/libctru/lib/libcitro2d.a
+
+          echo "======================================"
+          echo "ALL 3DS LIBRARIES FOUND"
+          echo "======================================"
 
       # ============================================================
-      # PATCH PROJECT MAKEFILE
+      # PATCH HOENN REBORN MAKEFILE
       # ============================================================
 
       - name: Patch Hoenn Reborn Makefile
@@ -383,8 +442,14 @@ jobs:
           from pathlib import Path
 
           p = Path("Makefile")
+
+          if not p.exists():
+              raise SystemExit("Makefile not found")
+
           s = p.read_text()
 
+          # mGBA's current static library target is "mgba".
+          # Older project scaffolding used "mgba-static".
           s = s.replace(
               "mgba-static",
               "mgba"
@@ -395,19 +460,28 @@ jobs:
           print("Hoenn Reborn Makefile patched.")
           PY
 
-      - name: Verify Makefile
+      # ============================================================
+      # VERIFY PROJECT
+      # ============================================================
+
+      - name: Verify project files
         shell: bash
         run: |
           set -e
 
           test -f Makefile
           test -f cia.rsf
+
           test -f source/main.c
           test -f source/dashboard.c
           test -f source/game_data.c
           test -f source/gba_core_mgba.c
 
-          echo "Project files verified."
+          test -d romfs/hoenn_reborn
+
+          echo "======================================"
+          echo "PROJECT FILES VERIFIED"
+          echo "======================================"
 
       # ============================================================
       # BUILD HOENN REBORN
@@ -423,40 +497,73 @@ jobs:
 
           export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
 
+          echo "======================================"
           echo "DEVKITPRO=$DEVKITPRO"
           echo "DEVKITARM=$DEVKITARM"
+          echo "======================================"
 
           arm-none-eabi-gcc --version
+
+          echo "Starting Hoenn Reborn build..."
 
           make -j2
 
       # ============================================================
-      # VERIFY OUTPUT
+      # VERIFY CIA
       # ============================================================
 
       - name: Verify CIA
         shell: bash
         run: |
+          set -e
+
           test -f Hoenn_Reborn.cia
+
+          echo "======================================"
+          echo "CIA BUILD SUCCESSFUL"
+          echo "======================================"
+
           ls -lh Hoenn_Reborn.cia
           wc -c Hoenn_Reborn.cia
+
+      # ============================================================
+      # VERIFY 3DSX
+      # ============================================================
 
       - name: Verify 3DSX
         shell: bash
         run: |
+          set -e
+
           test -f Hoenn_Reborn.3dsx
+
+          echo "======================================"
+          echo "3DSX BUILD SUCCESSFUL"
+          echo "======================================"
+
           ls -lh Hoenn_Reborn.3dsx
           wc -c Hoenn_Reborn.3dsx
+
+      # ============================================================
+      # VERIFY ELF
+      # ============================================================
 
       - name: Verify ELF
         shell: bash
         run: |
+          set -e
+
           test -f Hoenn_Reborn.elf
+
+          echo "======================================"
+          echo "ELF BUILD SUCCESSFUL"
+          echo "======================================"
+
           ls -lh Hoenn_Reborn.elf
           wc -c Hoenn_Reborn.elf
 
       # ============================================================
-      # UPLOAD BUILD ARTIFACTS
+      # UPLOAD CIA
       # ============================================================
 
       - name: Upload CIA
@@ -466,6 +573,10 @@ jobs:
           path: Hoenn_Reborn.cia
           if-no-files-found: error
 
+      # ============================================================
+      # UPLOAD 3DSX
+      # ============================================================
+
       - name: Upload 3DSX
         uses: actions/upload-artifact@v4
         with:
@@ -473,12 +584,20 @@ jobs:
           path: Hoenn_Reborn.3dsx
           if-no-files-found: error
 
+      # ============================================================
+      # UPLOAD ELF
+      # ============================================================
+
       - name: Upload ELF
         uses: actions/upload-artifact@v4
         with:
           name: Hoenn-Reborn-ELF
           path: Hoenn_Reborn.elf
           if-no-files-found: error
+
+      # ============================================================
+      # UPLOAD BUILD FILES
+      # ============================================================
 
       - name: Upload build files
         uses: actions/upload-artifact@v4
