@@ -14,6 +14,7 @@ jobs:
       image: devkitpro/devkitarm:latest
 
     steps:
+
       # ============================================================
       # CHECKOUT
       # ============================================================
@@ -49,12 +50,123 @@ jobs:
         run: |
           echo "/opt/devkitpro/devkitARM/bin" >> "$GITHUB_PATH"
           echo "/opt/devkitpro/tools/bin" >> "$GITHUB_PATH"
+          echo "/opt/devkitpro/portlibs/3ds/bin" >> "$GITHUB_PATH"
 
           export DEVKITPRO=/opt/devkitpro
           export DEVKITARM=/opt/devkitpro/devkitARM
 
           echo "DEVKITPRO=$DEVKITPRO" >> "$GITHUB_ENV"
           echo "DEVKITARM=$DEVKITARM" >> "$GITHUB_ENV"
+
+      # ============================================================
+      # DEVKITPRO CMAKE + CATNIP
+      # ============================================================
+
+      - name: Install devkitPro CMake helpers
+        shell: bash
+        run: |
+          set -e
+
+          cd /tmp
+
+          # --------------------------------------------------------
+          # 3DS CMake package
+          # --------------------------------------------------------
+
+          wget -O 3ds-cmake.pkg.tar.zst \
+            https://wii.leseratte10.de/devkitPro/cmake/3ds-cmake-1.5.2-1-any.pkg.tar.zst
+
+          rm -rf /tmp/3ds-cmake
+          mkdir -p /tmp/3ds-cmake
+
+          tar \
+            --use-compress-program=unzstd \
+            -xf 3ds-cmake.pkg.tar.zst \
+            -C /tmp/3ds-cmake
+
+          echo "Installing 3DS CMake files..."
+
+          cp -a \
+            /tmp/3ds-cmake/opt/devkitpro/. \
+            /opt/devkitpro/
+
+          # --------------------------------------------------------
+          # Catnip
+          # --------------------------------------------------------
+
+          wget -O catnip.pkg.tar.zst \
+            https://wii.leseratte10.de/devkitPro/other-stuff/catnip-0.2.0-1-any.pkg.tar.zst
+
+          rm -rf /tmp/catnip
+          mkdir -p /tmp/catnip
+
+          tar \
+            --use-compress-program=unzstd \
+            -xf catnip.pkg.tar.zst \
+            -C /tmp/catnip
+
+          echo "Installing Catnip..."
+
+          cp -a \
+            /tmp/catnip/opt/devkitpro/. \
+            /opt/devkitpro/
+
+          # --------------------------------------------------------
+          # Show installed CMake tools
+          # --------------------------------------------------------
+
+          echo "Installed devkitPro CMake files:"
+
+          find /opt/devkitpro \
+            -type f \
+            \( \
+              -name 'arm-none-eabi-cmake' \
+              -o \
+              -name '3DS.cmake' \
+              -o \
+              -name '*catnip*' \
+            \) \
+            -print \
+            2>/dev/null || true
+
+          echo "devkitPro CMake helper installation complete."
+
+      # ============================================================
+      # VERIFY DEVKITPRO CMAKE
+      # ============================================================
+
+      - name: Verify devkitPro CMake
+        shell: bash
+        run: |
+          set -e
+
+          export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
+          export PATH="/opt/devkitpro/tools/bin:$PATH"
+          export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
+
+          echo "Searching for arm-none-eabi-cmake..."
+
+          CMAKE3DS="$(
+            find /opt/devkitpro \
+              -type f \
+              -name arm-none-eabi-cmake \
+              -print \
+              -quit
+          )"
+
+          if [ -z "$CMAKE3DS" ]; then
+            echo "ERROR: arm-none-eabi-cmake was not found."
+            exit 1
+          fi
+
+          echo "Found:"
+          echo "$CMAKE3DS"
+
+          chmod +x "$CMAKE3DS"
+
+          "$CMAKE3DS" --version
+
+          echo "devkitPro CMake is ready."
 
       # ============================================================
       # 3DS TOOLS
@@ -78,8 +190,6 @@ jobs:
             -xf 3dstools.pkg.tar.zst \
             -C /tmp/3dstools
 
-          echo "Extracted 3dstools package."
-
           if [ -d /tmp/3dstools/opt/devkitpro/tools ]; then
             cp -a \
               /tmp/3dstools/opt/devkitpro/tools/. \
@@ -92,9 +202,11 @@ jobs:
               /opt/devkitpro/tools/bin/
           fi
 
-          find /opt/devkitpro/tools -type f \
+          find /opt/devkitpro/tools \
+            -type f \
             \( -name tex3ds -o -name 3dsxtool \) \
-            -exec chmod +x {} \; 2>/dev/null || true
+            -exec chmod +x {} \; \
+            2>/dev/null || true
 
           echo "3dstools installation complete."
 
@@ -117,9 +229,6 @@ jobs:
 
           unzip -q bannertool.zip -d /tmp/bannertool
 
-          echo "Contents of bannertool package:"
-          find /tmp/bannertool -maxdepth 3 -type f -print
-
           BANNERTOOL_BIN="/tmp/bannertool/linux-x86_64/bannertool"
 
           test -f "$BANNERTOOL_BIN"
@@ -130,9 +239,6 @@ jobs:
             /opt/devkitpro/tools/bin/bannertool
 
           chmod +x \
-            /opt/devkitpro/tools/bin/bannertool
-
-          test -x \
             /opt/devkitpro/tools/bin/bannertool
 
           echo "bannertool installation complete."
@@ -174,9 +280,6 @@ jobs:
           chmod +x \
             /opt/devkitpro/tools/bin/makerom
 
-          test -x \
-            /opt/devkitpro/tools/bin/makerom
-
           echo "makerom installation complete."
 
       # ============================================================
@@ -188,22 +291,29 @@ jobs:
         run: |
           set -e
 
-          echo "Checking ARM compiler..."
+          export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
+          export PATH="/opt/devkitpro/tools/bin:$PATH"
+          export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
+
+          echo "ARM compiler:"
           command -v arm-none-eabi-gcc
 
-          echo "Checking bannertool..."
+          echo "3DS CMake:"
+          command -v arm-none-eabi-cmake
+
+          echo "bannertool:"
           command -v bannertool
 
-          echo "Checking makerom..."
+          echo "makerom:"
           command -v makerom
 
-          echo "Checking tex3ds..."
+          echo "tex3ds:"
           command -v tex3ds
 
-          echo "Checking 3dsxtool..."
+          echo "3dsxtool:"
           command -v 3dsxtool
 
-          echo "All required 3DS tools are available."
+          echo "All required tools are available."
 
       # ============================================================
       # BUILD LIBCTRU
@@ -226,8 +336,6 @@ jobs:
             -xzf libctru.tar.gz \
             -C /tmp/libctru
 
-          echo "Finding libctru Makefile..."
-
           LIBCTRU_ROOT="$(
             find /tmp/libctru/libctru-2.7.0 \
               -type f \
@@ -237,15 +345,8 @@ jobs:
               | xargs dirname
           )"
 
-          echo "libctru Makefile directory:"
-          echo "$LIBCTRU_ROOT"
-
           test -n "$LIBCTRU_ROOT"
           test -f "$LIBCTRU_ROOT/Makefile"
-
-          # --------------------------------------------------------
-          # Find gdbhio.c
-          # --------------------------------------------------------
 
           GDBHIO_FILE="$(
             find /tmp/libctru/libctru-2.7.0 \
@@ -257,18 +358,8 @@ jobs:
 
           test -n "$GDBHIO_FILE"
 
-          echo "Found gdbhio.c:"
+          echo "Patching:"
           echo "$GDBHIO_FILE"
-
-          # --------------------------------------------------------
-          # Patch the EXACT declaration from the compiler error
-          #
-          # Original:
-          #     gdbhio_mode_t gdbMode = 0;
-          #
-          # New:
-          #     gdbhio_mode_t gdbMode __attribute__((unused)) = 0;
-          # --------------------------------------------------------
 
           python3 - "$GDBHIO_FILE" <<'PY'
           from pathlib import Path
@@ -287,7 +378,8 @@ jobs:
           if match:
               replacement = (
                   match.group(1)
-                  + "gdbhio_mode_t gdbMode __attribute__((unused)) = 0;"
+                  + "gdbhio_mode_t gdbMode "
+                    "__attribute__((unused)) = 0;"
               )
 
               text = (
@@ -299,54 +391,30 @@ jobs:
               p.write_text(text)
 
               print("gdbMode declaration patched successfully.")
+
+          elif (
+              "__attribute__((unused))" in text
+              and "gdbMode" in text
+          ):
+              print("gdbMode was already patched.")
+
           else:
-              # Check whether it was already patched.
-              if "__attribute__((unused))" in text and "gdbMode" in text:
-                  print("gdbMode was already patched.")
-              else:
-                  print("ERROR: Expected gdbMode declaration was not found.")
-                  print("Relevant lines containing gdbMode:")
-
-                  for number, line in enumerate(
-                      text.splitlines(),
-                      start=1
-                  ):
-                      if "gdbMode" in line:
-                          print(f"{number}: {line}")
-
-                  raise SystemExit(1)
+              raise SystemExit(
+                  "ERROR: gdbMode declaration not found."
+              )
           PY
-
-          # --------------------------------------------------------
-          # Verify the patch before compiling
-          # --------------------------------------------------------
-
-          echo "Checking patched gdbMode line..."
 
           grep -n \
             "gdbhio_mode_t gdbMode" \
             "$GDBHIO_FILE"
 
-          if ! grep -q \
+          grep -q \
             "gdbMode __attribute__((unused))" \
-            "$GDBHIO_FILE"; then
-            echo "ERROR: gdbMode patch verification failed."
-            exit 1
-          fi
-
-          echo "gdbMode patch verified."
-
-          # --------------------------------------------------------
-          # Build libctru
-          # --------------------------------------------------------
+            "$GDBHIO_FILE"
 
           cd "$LIBCTRU_ROOT"
 
-          echo "Building libctru from:"
-          pwd
-
           make -j2
-
           make install
 
           echo "libctru build/install complete."
@@ -378,10 +446,7 @@ jobs:
 
           cd "$CITRO3D_ROOT"
 
-          echo "Building citro3d..."
-
           make -j2
-
           make install
 
           echo "citro3d build/install complete."
@@ -394,6 +459,13 @@ jobs:
         shell: bash
         run: |
           set -e
+
+          export DEVKITPRO=/opt/devkitpro
+          export DEVKITARM=/opt/devkitpro/devkitARM
+
+          export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
+          export PATH="/opt/devkitpro/tools/bin:$PATH"
+          export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
 
           cd /tmp
 
@@ -411,22 +483,31 @@ jobs:
 
           test -f "$CITRO2D_ROOT/CMakeLists.txt"
 
-          echo "Configuring citro2d..."
+          echo "======================================"
+          echo "Configuring citro2d with devkitPro CMake"
+          echo "======================================"
 
-          cmake \
+          command -v arm-none-eabi-cmake
+
+          arm-none-eabi-cmake \
             -S "$CITRO2D_ROOT" \
             -B "$CITRO2D_ROOT/build" \
-            -DCMAKE_INSTALL_PREFIX=/opt/devkitpro/libctru
+            -DCMAKE_INSTALL_PREFIX=/opt/devkitpro/libctru \
+            -DCMAKE_BUILD_TYPE=Release
 
-          echo "Building citro2d..."
+          echo "======================================"
+          echo "Building citro2d"
+          echo "======================================"
 
-          cmake \
+          arm-none-eabi-cmake \
             --build "$CITRO2D_ROOT/build" \
             -j2
 
-          echo "Installing citro2d..."
+          echo "======================================"
+          echo "Installing citro2d"
+          echo "======================================"
 
-          cmake \
+          arm-none-eabi-cmake \
             --install "$CITRO2D_ROOT/build"
 
           echo "citro2d build/install complete."
@@ -440,19 +521,19 @@ jobs:
         run: |
           set -e
 
-          echo "Searching for libctru..."
+          echo "libctru:"
           find /opt/devkitpro \
-            -name 'libctru.a' \
+            -name libctru.a \
             -print
 
-          echo "Searching for libcitro3d..."
+          echo "libcitro3d:"
           find /opt/devkitpro \
-            -name 'libcitro3d.a' \
+            -name libcitro3d.a \
             -print
 
-          echo "Searching for libcitro2d..."
+          echo "libcitro2d:"
           find /opt/devkitpro \
-            -name 'libcitro2d.a' \
+            -name libcitro2d.a \
             -print
 
           test -f \
@@ -532,12 +613,12 @@ jobs:
           export DEVKITPRO=/opt/devkitpro
           export DEVKITARM=/opt/devkitpro/devkitARM
 
-          export PATH="$DEVKITARM/bin:$DEVKITPRO/tools/bin:$PATH"
+          export PATH="/opt/devkitpro/portlibs/3ds/bin:$PATH"
+          export PATH="/opt/devkitpro/tools/bin:$PATH"
+          export PATH="/opt/devkitpro/devkitARM/bin:$PATH"
 
-          echo "======================================"
           echo "DEVKITPRO=$DEVKITPRO"
           echo "DEVKITARM=$DEVKITARM"
-          echo "======================================"
 
           arm-none-eabi-gcc --version
 
