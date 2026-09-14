@@ -14,6 +14,10 @@ jobs:
       image: devkitpro/devkitarm:latest
 
     steps:
+      # ============================================================
+      # CHECKOUT
+      # ============================================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -75,8 +79,6 @@ jobs:
             -C /tmp/3dstools
 
           echo "Extracted 3dstools package."
-
-          find /tmp/3dstools -maxdepth 5 -type f -print | head -100
 
           if [ -d /tmp/3dstools/opt/devkitpro/tools ]; then
             cp -a \
@@ -241,16 +243,107 @@ jobs:
           test -n "$LIBCTRU_ROOT"
           test -f "$LIBCTRU_ROOT/Makefile"
 
+          # --------------------------------------------------------
+          # Find gdbhio.c
+          # --------------------------------------------------------
+
+          GDBHIO_FILE="$(
+            find /tmp/libctru/libctru-2.7.0 \
+              -type f \
+              -name gdbhio.c \
+              -print \
+              -quit
+          )"
+
+          test -n "$GDBHIO_FILE"
+
+          echo "Found gdbhio.c:"
+          echo "$GDBHIO_FILE"
+
+          # --------------------------------------------------------
+          # Patch the EXACT declaration from the compiler error
+          #
+          # Original:
+          #     gdbhio_mode_t gdbMode = 0;
+          #
+          # New:
+          #     gdbhio_mode_t gdbMode __attribute__((unused)) = 0;
+          # --------------------------------------------------------
+
+          python3 - "$GDBHIO_FILE" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          p = Path(sys.argv[1])
+          text = p.read_text()
+
+          pattern = re.compile(
+              r'(?m)^(\s*)gdbhio_mode_t\s+gdbMode\s*=\s*0\s*;\s*$'
+          )
+
+          match = pattern.search(text)
+
+          if match:
+              replacement = (
+                  match.group(1)
+                  + "gdbhio_mode_t gdbMode __attribute__((unused)) = 0;"
+              )
+
+              text = (
+                  text[:match.start()]
+                  + replacement
+                  + text[match.end():]
+              )
+
+              p.write_text(text)
+
+              print("gdbMode declaration patched successfully.")
+          else:
+              # Check whether it was already patched.
+              if "__attribute__((unused))" in text and "gdbMode" in text:
+                  print("gdbMode was already patched.")
+              else:
+                  print("ERROR: Expected gdbMode declaration was not found.")
+                  print("Relevant lines containing gdbMode:")
+
+                  for number, line in enumerate(
+                      text.splitlines(),
+                      start=1
+                  ):
+                      if "gdbMode" in line:
+                          print(f"{number}: {line}")
+
+                  raise SystemExit(1)
+          PY
+
+          # --------------------------------------------------------
+          # Verify the patch before compiling
+          # --------------------------------------------------------
+
+          echo "Checking patched gdbMode line..."
+
+          grep -n \
+            "gdbhio_mode_t gdbMode" \
+            "$GDBHIO_FILE"
+
+          if ! grep -q \
+            "gdbMode __attribute__((unused))" \
+            "$GDBHIO_FILE"; then
+            echo "ERROR: gdbMode patch verification failed."
+            exit 1
+          fi
+
+          echo "gdbMode patch verified."
+
+          # --------------------------------------------------------
+          # Build libctru
+          # --------------------------------------------------------
+
           cd "$LIBCTRU_ROOT"
 
           echo "Building libctru from:"
           pwd
-
-          # Prevent the unused-but-set-variable warning
-          # from being treated as an error.
-          export CFLAGS="${CFLAGS:-} -Wno-error=unused-but-set-variable"
-
-          echo "CFLAGS=$CFLAGS"
 
           make -j2
 
@@ -392,14 +485,14 @@ jobs:
           if not p.exists():
               raise SystemExit("Makefile not found")
 
-          s = p.read_text()
+          text = p.read_text()
 
-          s = s.replace(
+          text = text.replace(
               "mgba-static",
               "mgba"
           )
 
-          p.write_text(s)
+          p.write_text(text)
 
           print("Hoenn Reborn Makefile patched.")
           PY
